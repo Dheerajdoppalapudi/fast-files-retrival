@@ -6,7 +6,7 @@ import { AuthContext } from "../../context/AuthContext"; // Import AuthContext
 const Login = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { login } = useContext(AuthContext); // Use login function from context
+  const { login } = useContext(AuthContext); 
 
   const onFinish = async (values) => {
     setLoading(true);
@@ -16,11 +16,11 @@ const Login = () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(values),
       });
-
+  
       const data = await response.json();
       if (response.ok) {
-        login(data.token); // Update global auth state
-        message.success("Login successful!");
+        login(data.token, data.id, data.username, data.role); // ✅ Store all user details
+        message.success(`Welcome, ${data.username}!`);
         navigate("/");
       } else {
         message.error(data.message || "Login failed");

@@ -6,19 +6,20 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    if (token) {
-      setUser({ token });
+    const storedUser = localStorage.getItem("user");
+    if (storedUser) {
+      setUser(JSON.parse(storedUser)); // ✅ Load stored user info
     }
   }, []);
 
-  const login = (token) => {
-    localStorage.setItem("token", token);
-    setUser({ token }); // ✅ Update state after login (this triggers re-render)
+  const login = (token, id, username, role) => {
+    const userData = { token, id, username, role };
+    localStorage.setItem("user", JSON.stringify(userData)); // ✅ Store user details
+    setUser(userData); 
   };
 
   const logout = () => {
-    localStorage.removeItem("token");
+    localStorage.removeItem("user");
     setUser(null);
   };
 

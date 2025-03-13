@@ -9,6 +9,7 @@ import Login from "./components/Auth/Login";
 import Register from "./components/Auth/Register";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
 import testS3Connection from "./Tests3";
+import PendingApprovals from "./components/PendingApprovals";
 
 const { Content } = Layout;
 
@@ -30,6 +31,7 @@ const AppContent = () => {
             <Route path="/compare" element={<FileComparison />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
+            <Route path="/approvals" element={<PendingApprovals userId={user?.id} />} />
           </Routes>
         </div>
       </Content>

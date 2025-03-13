@@ -1,6 +1,6 @@
 import React, { useContext } from "react";
 import { Menu, Button } from "antd";
-import { FileOutlined, UploadOutlined, DiffOutlined, LogoutOutlined } from "@ant-design/icons";
+import { FileOutlined, UploadOutlined, DiffOutlined, LogoutOutlined, AuditOutlined} from "@ant-design/icons";
 import { useNavigate, useLocation } from "react-router-dom";
 import { AuthContext } from "../context/AuthContext";
 
@@ -22,6 +22,9 @@ const Navbar = () => {
       </Menu.Item>
       <Menu.Item key="compare" icon={<DiffOutlined />} onClick={() => navigate("/compare")}>
         File Comparison
+      </Menu.Item>
+      <Menu.Item key="compare" icon={<AuditOutlined />} onClick={() => navigate("/approvals")}>
+        Approvals
       </Menu.Item>
       <Menu.Item key="logout" style={{ marginLeft: "auto" }}>
         <Button type="text" icon={<LogoutOutlined />} onClick={() => { logout(); navigate("/login"); }} style={{ color: "white" }}>

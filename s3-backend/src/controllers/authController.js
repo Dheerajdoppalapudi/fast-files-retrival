@@ -28,14 +28,22 @@ export function loginUser(req, res) {
   const { username, password } = req.body;
 
   const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+  console.log("User: ", user)
   if (!user || !bcrypt.compareSync(password, user.password)) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
 
   const token = jwt.sign({ id: user.id, role: user.role }, SECRET_KEY, { expiresIn: "1h" });
 
-  res.json({ token });
+  const data = {
+    token: token,
+    id: user.id,      
+    username: user.username,  
+    role: user.role     
+  }
+  res.status(200).json(data);
 }
+
 
 export function getUserInfo(req, res) {
   const user = db.prepare("SELECT id, username, role FROM users WHERE id = ?").get(req.user.id);
