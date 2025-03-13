@@ -1,13 +1,41 @@
-import React, { useEffect } from "react";
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
+import React, { useEffect, useContext } from "react";
+import { BrowserRouter as Router, Routes, Route, useLocation } from "react-router-dom";
 import { Layout } from "antd";
 import Navbar from "./components/Navbar";
 import FileManager from "./components/FileManager";
 import UploadFile from "./components/UploadFile";
 import FileComparison from "./components/FileComparision";
+import Login from "./components/Auth/Login";
+import Register from "./components/Auth/Register";
+import { AuthProvider, AuthContext } from "./context/AuthContext";
 import testS3Connection from "./Tests3";
 
 const { Content } = Layout;
+
+const AppContent = () => {
+  const location = useLocation();
+  const { user } = useContext(AuthContext);
+
+  // Hide Navbar for login & register pages
+  const hideNavbar = ["/login", "/register"].includes(location.pathname);
+
+  return (
+    <Layout className="app-layout">
+      {!hideNavbar && user && <Navbar />} {/* ✅ Show Navbar only if user is logged in */}
+      <Content className="app-content">
+        <div className="app-container">
+          <Routes>
+            <Route path="/" element={<FileManager />} />
+            <Route path="/upload" element={<UploadFile />} />
+            <Route path="/compare" element={<FileComparison />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+          </Routes>
+        </div>
+      </Content>
+    </Layout>
+  );
+};
 
 function App() {
   useEffect(() => {
@@ -15,20 +43,11 @@ function App() {
   }, []);
 
   return (
-    <Router>
-      <Layout className="app-layout">
-        <Navbar />
-        <Content className="app-content">
-          <div className="app-container">
-            <Routes>
-              <Route path="/" element={<FileManager />} />
-              <Route path="/upload" element={<UploadFile />} />
-              <Route path="/compare" element={<FileComparison />} />
-            </Routes>
-          </div>
-        </Content>
-      </Layout>
-    </Router>
+    <AuthProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </AuthProvider>
   );
 }
 

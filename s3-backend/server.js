@@ -7,6 +7,8 @@ import crypto from "crypto";
 import path from "path";
 import stream from "stream";
 import { promisify } from "util";
+import authRoutes from "./src/routes/authRoutes.js";
+
 
 dotenv.config();
 const pipeline = promisify(stream.pipeline);
@@ -19,6 +21,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 app.use(express.json());
+app.use("/auth", authRoutes);
 
 const s3 = new S3Client({
   region: process.env.AWS_REGION,
@@ -188,9 +191,6 @@ app.get("/files", async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 });
-
-
-
 
 const PORT = process.env.PORT || 8000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
