@@ -1,70 +1,45 @@
+import db from "../models/db.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
-import db from "../models/db.js";
 import dotenv from "dotenv";
 
 dotenv.config();
 
-const SECRET_KEY = process.env.JWT_SECRET || "your_secret_key";
+const SECRET_KEY = process.env.JWT_SECRET || "my_super_secret_key";
 
-
-export const registerUser = async (req, res) => {
+export function registerUser(req, res) {
   const { username, password, role } = req.body;
 
   if (!username || !password || !role) {
     return res.status(400).json({ message: "All fields are required" });
   }
 
+  const hashedPassword = bcrypt.hashSync(password, 10);
+
   try {
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    const stmt = db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
-
-    try {
-      stmt.run(username, hashedPassword, role);
-      res.status(201).json({ message: "User registered successfully" });
-    } catch (err) {
-      if (err.code === "SQLITE_CONSTRAINT") {
-        return res.status(400).json({ error: "Username already exists" });
-      }
-      throw err;
-    }
+    db.prepare("INSERT INTO users (username, password, role) VALUES (?, ?, ?)").run(username, hashedPassword, role);
+    res.status(201).json({ message: "User registered successfully" });
   } catch (error) {
-    console.error("Registration Error:", error);
-    res.status(500).json({ error: "Internal Server Error" });
+    res.status(500).json({ message: "Error registering user", error: error.message });
   }
-};
+}
 
-export const loginUser = async (req, res) => {
+export function loginUser(req, res) {
   const { username, password } = req.body;
 
-  if (!username || !password) {
-    return res.status(400).json({ message: "Username and password required" });
+  const user = db.prepare("SELECT * FROM users WHERE username = ?").get(username);
+  if (!user || !bcrypt.compareSync(password, user.password)) {
+    return res.status(401).json({ message: "Invalid credentials" });
   }
 
-  try {
-    const stmt = db.prepare("SELECT * FROM users WHERE username = ?");
-    const user = stmt.get(username);
+  const token = jwt.sign({ id: user.id, role: user.role }, SECRET_KEY, { expiresIn: "1h" });
 
-    if (!user) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
+  res.json({ token });
+}
 
-    const isMatch = await bcrypt.compare(password, user.password);
-    if (!isMatch) {
-      return res.status(401).json({ message: "Invalid credentials" });
-    }
+export function getUserInfo(req, res) {
+  const user = db.prepare("SELECT id, username, role FROM users WHERE id = ?").get(req.user.id);
+  if (!user) return res.status(404).json({ message: "User not found" });
 
-    const token = jwt.sign({ id: user.id, username: user.username, role: user.role }, SECRET_KEY, { expiresIn: "1h" });
-
-    res.json({ token, user: { id: user.id, username: user.username, role: user.role } });
-  } catch (error) {
-    console.error("Login Error:", error);
-    res.status(500).json({ error: "Internal Server Error" });
-  }
-};
-
-
-export const getUserInfo = (req, res) => {
-  res.json({ user: req.user });
-};
+  res.json(user);
+}
