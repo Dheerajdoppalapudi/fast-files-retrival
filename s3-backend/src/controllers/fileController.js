@@ -1,127 +1,156 @@
-import { PutObjectCommand, ListObjectVersionsCommand, GetObjectCommand, ListBucketsCommand } from "@aws-sdk/client-s3";
-import s3 from "../config/s3Config.js";
-import streamToString from "../utils/streamToString.js";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import db from "./../models/db.js"
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
-export const uploadFile = async (req, res) => {
-  try {
-    if (!req.file) return res.status(400).json({ success: false, message: "No file uploaded" });
+export const UPLOAD_DIR = path.join(__dirname, "uploads");
+export const VERSION_DIR = path.join(__dirname, "uploads", "versions");
 
-    const bucketName = process.env.AWS_BUCKET_NAME;
-    if (!bucketName) return res.status(500).json({ success: false, message: "Bucket name not configured" });
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+if (!fs.existsSync(VERSION_DIR)) fs.mkdirSync(VERSION_DIR, { recursive: true });
 
-    const uploadParams = {
-      Bucket: bucketName,
-      Key: req.file.originalname,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype,
-    };
-
-    await s3.send(new PutObjectCommand(uploadParams));
-
-    res.json({
-      success: true,
-      message: "File uploaded successfully",
-      fileUrl: `https://${bucketName}.s3.amazonaws.com/${req.file.originalname}`,
-    });
-
-  } catch (error) {
-    console.error("Upload Error:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-};
-
-export const getFileList = async (req, res) => {
-  try {
-    const bucketName = process.env.AWS_BUCKET_NAME;
-    const command = new ListObjectVersionsCommand({ Bucket: bucketName });
-    const response = await s3.send(command);
-
-    if (!response.Versions) return res.json({ success: true, files: {} });
-
-    const files = {};
-
-    response.Versions.forEach((file) => {
-      const parts = file.Key.split("/");
-      let currentLevel = files;
-
-      for (let i = 0; i < parts.length; i++) {
-        const part = parts[i];
-        if (!currentLevel[part]) {
-          currentLevel[part] = i === parts.length - 1 ? [] : {}; 
+/**
+ * Save a new file upload and handle versioning.
+ * @param {Object} file - The uploaded file object (req.file).
+ * @param {number} userId - The ID of the user uploading the file.
+ * @returns {Object} - The file name and new version.
+ */
+export const saveFile = async (file, userId, directory = "") => {
+    try {
+        // Create the main upload directory if it doesn't exist
+        const folderPath = path.join(UPLOAD_DIR, directory);
+        if (!fs.existsSync(folderPath)) {
+            fs.mkdirSync(folderPath, { recursive: true });
         }
-        if (i === parts.length - 1) {
-          currentLevel[part].push({
-            versionId: file.VersionId,
-            lastModified: file.LastModified,
-            isLatest: file.IsLatest,
-            fileUrl: `https://${bucketName}.s3.amazonaws.com/${file.Key}?versionId=${file.VersionId}`,
-          });
+
+        // Create the version directory structure
+        const versionFolderPath = path.join(VERSION_DIR, directory);
+        if (!fs.existsSync(versionFolderPath)) {
+            fs.mkdirSync(versionFolderPath, { recursive: true });
+        }
+
+        const filePath = path.join(folderPath, file.originalname);
+
+        // Check if the file already exists
+        if (fs.existsSync(filePath)) {
+            // Get the current version from the database
+            const row = db.prepare(
+                "SELECT version FROM files WHERE filename = ? AND directory = ? ORDER BY version DESC LIMIT 1"
+            ).get(file.originalname, directory);
+
+            let newVersion = row ? row.version + 1 : 1;
+            const previousVersion = row ? row.version : 0;
+
+            // Create the version backup file path
+            const oldVersionPath = path.join(versionFolderPath, `${file.originalname}_v${previousVersion}`);
+            
+            // Copy the existing file to the version directory
+            fs.copyFileSync(filePath, oldVersionPath);
+            
+            // Write the new file
+            fs.writeFileSync(filePath, file.buffer);
+
+            // Insert file metadata into SQLite database
+            const stmt = db.prepare(
+                "INSERT INTO files (filename, filepath, version, user_id, directory) VALUES (?, ?, ?, ?, ?)"
+            );
+            stmt.run(file.originalname, filePath, newVersion, userId, directory);
+
+            return { filename: file.originalname, version: newVersion, directory };
         } else {
-          currentLevel = currentLevel[part];
+            // First-time save
+            fs.writeFileSync(filePath, file.buffer);
+
+            const stmt = db.prepare(
+                "INSERT INTO files (filename, filepath, version, user_id, directory) VALUES (?, ?, ?, ?, ?)"
+            );
+            stmt.run(file.originalname, filePath, 1, userId, directory);
+
+            return { filename: file.originalname, version: 1, directory };
         }
-      }
-    });
-
-    res.json({ success: true, files });
-  } catch (error) {
-    console.error("Error fetching files:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
+    } catch (err) {
+        console.error("Error saving file:", err);
+        throw new Error("File upload failed: " + err.message);
+    }
 };
 
-export const getFileContent = async (req, res) => {
-  const { key, versionId } = req.query;
-  const bucketName = process.env.AWS_BUCKET_NAME;
 
-  if (!key || !versionId) {
-    return res.status(400).json({ success: false, message: "Missing key or versionId" });
-  }
+// Route to create a directory
 
-  try {
-    const command = new GetObjectCommand({ Bucket: bucketName, Key: key, VersionId: versionId });
-    const response = await s3.send(command);
-    const content = await streamToString(response.Body);
 
-    res.json({ success: true, content });
-  } catch (error) {
-    console.error("Error fetching file content:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
+/**
+ * Get all file versions for a given filename.
+ * @param {string} filename - The name of the file.
+ * @returns {Array} - List of file versions with metadata.
+ */
+export const getFileVersions = async (filename) => {
+    try {
+        const stmt = db.prepare(
+            "SELECT id, filename, filepath, version, uploaded_at FROM files WHERE filename = ? ORDER BY version DESC"
+        );
+        return stmt.all(filename);
+    } catch (err) {
+        console.error("Error fetching file versions:", err);
+        throw new Error("Could not retrieve file versions.");
+    }
 };
 
-export const compareFiles = async (req, res) => {
-  const { key, versionId1, versionId2 } = req.query;
-  const bucketName = process.env.AWS_BUCKET_NAME;
+/**
+ * Get a specific version of a file.
+ * @param {string} filename - The file name.
+ * @param {number} version - The version number.
+ * @returns {Object} - File path and metadata.
+ */
+export const getFileByVersion = async (filename, version) => {
+    try {
+        const stmt = db.prepare(
+            "SELECT filename, filepath, version FROM files WHERE filename = ? AND version = ?"
+        );
+        const file = stmt.get(filename, version);
 
-  if (!key || !versionId1 || !versionId2) {
-    return res.status(400).json({ success: false, message: "Missing key or versionId" });
-  }
+        if (!file) {
+            throw new Error("File version not found.");
+        }
 
-  try {
-    const getFileContent = async (versionId) => {
-      const command = new GetObjectCommand({ Bucket: bucketName, Key: key, VersionId: versionId });
-      const response = await s3.send(command);
-      return await streamToString(response.Body);
-    };
-
-    const [content1, content2] = await Promise.all([getFileContent(versionId1), getFileContent(versionId2)]);
-
-    res.json({
-      success: true,
-      message: content1 === content2 ? "Files are identical" : "Files are different",
-    });
-
-  } catch (error) {
-    console.error("Error comparing files:", error);
-    res.status(500).json({ success: false, error: error.message });
-  }
+        return file;
+    } catch (err) {
+        console.error("Error fetching file:", err);
+        throw new Error("Could not retrieve file.");
+    }
 };
 
-export const testS3 = async (req, res) => {
-  try {
-    const data = await s3.send(new ListBucketsCommand({}));
-    res.json({ success: true, buckets: data.Buckets });
-  } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
-  }
+/**
+ * Rollback a file to a previous version.
+ * @param {string} filename - The file name.
+ * @param {number} version - The version to restore.
+ * @param {number} userId - The ID of the user performing the rollback.
+ * @returns {Object} - Restored file details.
+ */
+export const rollbackFile = async (filename, version, userId) => {
+    try {
+        const file = await getFileByVersion(filename, version);
+        const latestVersionPath = path.join(UPLOAD_DIR, filename);
+        const versionedFilePath = path.join(VERSION_DIR, `${filename}_v${version}`);
+
+        if (!fs.existsSync(versionedFilePath)) {
+            throw new Error("Version file does not exist.");
+        }
+
+        // Move the selected version back to the main directory
+        fs.copyFileSync(versionedFilePath, latestVersionPath);
+
+        // Insert rollback action as a new version
+        const newVersion = version + 1;
+        const stmt = db.prepare(
+            "INSERT INTO files (filename, filepath, version, user_id) VALUES (?, ?, ?, ?)"
+        );
+        stmt.run(filename, latestVersionPath, newVersion, userId);
+
+        return { filename, restoredVersion: version, newVersion };
+    } catch (err) {
+        console.error("Error rolling back file:", err);
+        throw new Error("Rollback failed.");
+    }
 };

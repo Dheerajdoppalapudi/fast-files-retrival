@@ -13,17 +13,15 @@ const FileComparison = () => {
         fetchFiles();
     }, []);
 
-    // Fetch list of files with versions
     const fetchFiles = async () => {
         try {
             const response = await axios.get("http://localhost:8000/files");
-            setFiles(Object.entries(response.data.files)); // Convert object to array
+            setFiles(Object.entries(response.data.files));
         } catch (error) {
             console.error("Error fetching files:", error);
         }
     };
 
-    // Fetch versions of selected file
     const fetchVersions = (fileKey) => {
         setSelectedFile(fileKey);
         setVersions(files.find(([key]) => key === fileKey)?.[1] || []);
@@ -32,7 +30,7 @@ const FileComparison = () => {
     // Fetch file content for a given version
     const fetchFileContent = async (versionId) => {
         try {
-            const response = await axios.get("http://localhost:8000/file-content", {
+            const response = await axios.get("http://localhost:8000/files/content", {
                 params: { key: selectedFile, versionId },
             });
             return response.data.content;

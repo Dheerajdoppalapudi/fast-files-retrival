@@ -9,7 +9,6 @@ const Navbar = () => {
   const location = useLocation();
   const { logout } = useContext(AuthContext);
 
-  // Set the active menu item based on the current route
   const selectedKey = location.pathname === "/" ? "file-manager" : location.pathname.slice(1);
 
   return (
@@ -23,7 +22,7 @@ const Navbar = () => {
       <Menu.Item key="compare" icon={<DiffOutlined />} onClick={() => navigate("/compare")}>
         File Comparison
       </Menu.Item>
-      <Menu.Item key="compare" icon={<AuditOutlined />} onClick={() => navigate("/approvals")}>
+      <Menu.Item key="approvals" icon={<AuditOutlined />} onClick={() => navigate("/approvals")}>
         Approvals
       </Menu.Item>
       <Menu.Item key="logout" style={{ marginLeft: "auto" }}>

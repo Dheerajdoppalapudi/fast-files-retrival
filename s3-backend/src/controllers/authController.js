@@ -37,13 +37,12 @@ export function loginUser(req, res) {
 
   const data = {
     token: token,
-    id: user.id,      
-    username: user.username,  
-    role: user.role     
+    id: user.id,
+    username: user.username,
+    role: user.role
   }
   res.status(200).json(data);
 }
-
 
 export function getUserInfo(req, res) {
   const user = db.prepare("SELECT id, username, role FROM users WHERE id = ?").get(req.user.id);

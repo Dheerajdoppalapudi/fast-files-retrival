@@ -8,7 +8,6 @@ import FileComparison from "./components/FileComparision";
 import Login from "./components/Auth/Login";
 import Register from "./components/Auth/Register";
 import { AuthProvider, AuthContext } from "./context/AuthContext";
-import testS3Connection from "./Tests3";
 import PendingApprovals from "./components/PendingApprovals";
 
 const { Content } = Layout;
@@ -22,7 +21,7 @@ const AppContent = () => {
 
   return (
     <Layout className="app-layout">
-      {!hideNavbar && user && <Navbar />} {/* ✅ Show Navbar only if user is logged in */}
+      {!hideNavbar && user && <Navbar />}
       <Content className="app-content">
         <div className="app-container">
           <Routes>
@@ -40,9 +39,7 @@ const AppContent = () => {
 };
 
 function App() {
-  useEffect(() => {
-    testS3Connection();
-  }, []);
+
 
   return (
     <AuthProvider>

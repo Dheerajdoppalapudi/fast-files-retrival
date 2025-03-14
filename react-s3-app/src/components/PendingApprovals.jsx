@@ -13,7 +13,6 @@ const PendingApprovals = ({ userId }) => {
     console.log("Logged-in user:", user.username, "Role:", user.role);
   }
 
-
   useEffect(() => {
     fetchPendingFiles();
   }, []);
