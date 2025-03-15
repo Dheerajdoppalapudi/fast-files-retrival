@@ -1,0 +1,77 @@
+what is diff postgree and mysql
+
+async and sync
+proces and thred
+https all details
+httpa secured    asasz   
+
+state less protocal  
+broswer send request to server and forgrt until response back
+its server duty and response to ip
+
+ankitkumarsingh435@gmail.com
+we have data set
+in which diffrenty type of feature like currency custome number and invoice id etc;
+first we have to check null or duplicate value
+
+we can do 3 thing of these value , mean or median, count the percentange if is its less then remove it
+
+we have to look for constant and kausick constan. to find the kausik using thresold function.
+we can delete these bwacuse it did not effect the modele
+
+we have condvert day to month or day;
+then look for catgeorical value then do encoding.
+encoding are two type
+1 nominal there is no order.
+2 odinal-foloow particula order(herical)
+
+here we can do 3 type of encoding 
+1 level
+2 binary
+3 one hot
+
+here we have use one hot encoding in which we diivde the category  to 0 to n-1 ;
+aftere that feture extraction;
+the feture which is useful for modele or new feature to extracted
+
+we can do feature extraction using two way
+1 forward propagtion - here we compare with two coulum and see the model prpagion
+
+2 backward prpoagtion - here we take n colum and each step n-1 propagtion to find how data is performing 
+if we remove the single column from data;
+
+now we devide the data intow three type 
+1 train set ->traing the model
+2 test set
+3 validation set -> here we check for model is underfit or overfit;
+underfitr -> if the model performing is bad in all these set then it said to underfit , to overcome using add 
+extra feature or do forwar and backward popagtion.
+overfit->here model value on train set 90% but not in test set , so there may data lekage , to overcome using
+remove the some etxar feture and remove model complexity ;
+
+
+here 5 model 
+linera regration y=mx+c;
+svr -> we draw such line on hyperplane so the maximum point covered the such line
+decision tree -> here this regration take column as proprerty and do some gain enthalpy and see that if there multiple feture of this proprty then branch into the leaves,
+random forest regration -> it sis bagging model,bootstrap model,multiple decion tree,it improvesion on each step during clsssifacion on feature,here we take avereg score of n desion tree
+xgb boost-> it step wise, at fisrt it run only one decion tree and check for on what feature model is perforing bad, here is trying to perform goood in this tree.
+
+
+
+
+
+
+ci/cd ->github action  
+
+luv
+bcrypt
+
+
+
+20
+
+
+
+12572884
+0008004401837
