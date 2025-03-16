@@ -4,55 +4,49 @@ import { User } from './userModel';
 import { Approver } from './Approver';
 import {Bucket} from './Bucket'
 import {MyItem} from './Myitem'
+import { BaseEntity } from './BaseEntity';
+
 
 @Entity({ name: 'approvals' })
-export class Approval {
-    @PrimaryGeneratedColumn()
-    id!: number;
+export class Approval extends BaseEntity {
+  @Column({ type: 'uuid', nullable: true })
+  objectVersionId?: string;
 
-    // The entity this approval is for (only one of these should be set)
-    @Column({ type: 'int', nullable: true })
-    objectVersionId?: number;
+  @ManyToOne(() => ObjectVersion, (objectVersion) => objectVersion.approvals, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'objectVersionId' })
+  objectVersion?: ObjectVersion;
 
-    @ManyToOne(() => ObjectVersion, (objectVersion) => objectVersion.approvals, { onDelete: 'CASCADE', nullable: true })
-    @JoinColumn({ name: 'objectVersionId' })
-    objectVersion?: ObjectVersion;
+  @Column({ type: 'uuid', nullable: true })
+  bucketId?: string;
 
-    @Column({ type: 'int', nullable: true })
-    bucketId?: number;
+  @ManyToOne(() => Bucket, (bucket) => bucket.approvals, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'bucketId' })
+  bucket?: Bucket;
 
-    @ManyToOne(() => Bucket, (bucket) => bucket.approvals, { onDelete: 'CASCADE', nullable: true })
-    @JoinColumn({ name: 'bucketId' })
-    bucket?: Bucket;
+  @Column({ type: 'uuid', nullable: true })
+  itemId?: string;
 
-    @Column({ type: 'int', nullable: true })
-    itemId?: number;
+  @ManyToOne(() => MyItem, (item) => item.approvals, { onDelete: 'CASCADE', nullable: true })
+  @JoinColumn({ name: 'itemId' })
+  item?: MyItem;
 
-    @ManyToOne(() => MyItem, (item) => item.approvals, { onDelete: 'CASCADE', nullable: true })
-    @JoinColumn({ name: 'itemId' })
-    item?: MyItem;
+  @Column({ type: 'uuid' })
+  approverId!: string;
 
-    // The approval metadata
-    @Column({ type: 'int' })
-    approverId!: number;
+  @ManyToOne(() => Approver, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'approverId' })
+  approver!: Approver;
 
-    @ManyToOne(() => Approver, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'approverId' })
-    approver!: Approver;
+  @Column({ type: 'uuid' })
+  userId!: string;
 
-    @Column({ type: 'int' })
-    userId!: number;
+  @ManyToOne(() => User, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'userId' })
+  user!: User;
 
-    @ManyToOne(() => User, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'userId' })
-    user!: User;
+  @Column({ type: 'varchar', length: 50 })
+  decision!: string;
 
-    @Column({ type: 'varchar', length: 50 })  // 'approved', 'rejected', 'pending'
-    decision!: string;
-
-    @Column({ type: 'text', nullable: true })
-    comments?: string;
-
-    @CreateDateColumn({ type: 'datetime' })
-    createdAt!: Date;
+  @Column({ type: 'text', nullable: true })
+  comments?: string;
 }

@@ -2,40 +2,33 @@ import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, CreateDa
 import { Bucket } from './Bucket';
 import { User } from './userModel';
 import { MyItem } from './Myitem';
+import { BaseEntity } from './BaseEntity';
 
 @Entity({ name: 'approvers' })
-export class Approver {
-    @PrimaryGeneratedColumn()
-    id!: number;
+export class Approver extends BaseEntity {
+  @Column({ type: 'varchar', length: 255 })
+  name!: string;
 
-    @Column({ type: 'varchar', length: 255 })
-    name!: string;
+  @Column({ type: 'boolean', default: false })
+  isGroup!: boolean;
 
-    @Column({ type: 'boolean', default: false })
-    isGroup!: boolean;
+  @ManyToMany(() => User)
+  @JoinTable({
+    name: "approver_users",
+    joinColumn: {
+      name: "approverId",
+      referencedColumnName: "id"
+    },
+    inverseJoinColumn: {
+      name: "userId",
+      referencedColumnName: "id"
+    }
+  })
+  users!: User[];
 
-    @ManyToMany(() => User)
-    @JoinTable({
-        name: "approver_users",
-        joinColumn: {
-            name: "approverId",
-            referencedColumnName: "id"
-        },
-        inverseJoinColumn: {
-            name: "userId",
-            referencedColumnName: "id"
-        }
-    })
-    users!: User[];
+  @Column({ type: 'varchar', length: 50, default: 'standard' }) 
+  approvalType!: string;
 
-    @Column({ type: 'varchar', length: 50, default: 'standard' }) 
-    // Type of approval: 'standard' (any approver can approve), 'unanimous' (all approvers must approve), etc.
-    approvalType!: string;
-
-    @Column({ type: 'int', default: 1 }) 
-    // Minimum number of approvals required (for standard type)
-    minApprovals!: number;
-
-    @CreateDateColumn({ type: 'datetime' })
-    createdAt!: Date;
+  @Column({ type: 'int', default: 1 }) 
+  minApprovals!: number;
 }

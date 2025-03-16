@@ -4,45 +4,83 @@ import { Permission } from '../models/Permission';
 export class PermissionService {
   private permissionRepository = AppDataSource.getRepository(Permission);
 
-  async hasBucketPermission(userId: any, bucketId: number, permissionType: string = 'write'): Promise<boolean> {
+  async hasBucketPermission(userId: any, bucketId: string, permissionType: string = 'write'): Promise<boolean> {
     const bucketPermission = await this.permissionRepository.findOne({
       where: { userId, bucketId, permissionType },
     });
     return !!bucketPermission;
   }
 
-  async hasItemPermission(userId: any, itemId: number, permissionType: string = 'write'): Promise<boolean> {
+  async hasItemPermission(userId: any, itemId: string, permissionType: string = 'write'): Promise<boolean> {
     const itemPermission = await this.permissionRepository.findOne({
       where: { userId, itemId, permissionType },
     });
     return !!itemPermission;
   }
 
-  async assignItemPermission(userId: any, itemId?: number, permissionType: string = 'write'): Promise<Permission> {
+  async assignItemPermission(userId: any, itemId?: string, permissionType: string = 'write'): Promise<Permission> {
+    const isPermissionExist = await this.permissionRepository.findOne({
+      where: { itemId, userId },
+    });
+    if (isPermissionExist) {
+      if (isPermissionExist.permissionType !== permissionType) {
+        isPermissionExist.permissionType = permissionType;
+        return await this.permissionRepository.save(isPermissionExist);
+      }
+      throw new Error('User already has access to this permission');
+    }
+
+    if (!itemId) {
+      throw new Error('itemId must be provided');
+    }
+
     const permission = new Permission();
     permission.userId = userId;
     permission.permissionType = permissionType;
-
-    if (itemId) {
-      permission.itemId = itemId;
-    } else {
-      throw new Error(' itemId must be provided');
-    }
+    permission.itemId = itemId;
 
     return await this.permissionRepository.save(permission);
   }
 
-  async assignBucketPermission(userId: any, bucketId?: number, permissionType: string = 'write'): Promise<Permission> {
+  async assignBucketPermission(userId: any, bucketId?: string, permissionType: string = 'write'): Promise<Permission> {
+    const isPermissionExist = await this.permissionRepository.findOne({
+      where: { bucketId, userId },
+    });
+    if (isPermissionExist) {
+      if (isPermissionExist.permissionType !== permissionType) {
+        isPermissionExist.permissionType = permissionType;
+        return await this.permissionRepository.save(isPermissionExist);
+      }
+      throw new Error('User already has access to this permission');
+    }
+
+    if (!bucketId) {
+      throw new Error('bucketId must be provided');
+    }
+
     const permission = new Permission();
     permission.userId = userId;
     permission.permissionType = permissionType;
-
-    if (bucketId) {
-      permission.bucketId = bucketId;
-    } else {
-      throw new Error(' bucketId must be provided');
-    }
+    permission.bucketId = bucketId;
 
     return await this.permissionRepository.save(permission);
+  }
+
+  async revokeItemPermission(userId: any, itemId: string): Promise<boolean> {
+    const itemPermission = await this.permissionRepository.findOne({ where: { userId, itemId } });
+    if (!itemPermission) {
+      throw new Error('Permission not found');
+    }
+    await this.permissionRepository.remove(itemPermission);
+    return true;
+  }
+
+  async revokeBucketPermission(userId: any, bucketId: string): Promise<boolean> {
+    const bucketPermission = await this.permissionRepository.findOne({ where: { userId, bucketId } });
+    if (!bucketPermission) {
+      throw new Error('Permission not found');
+    }
+    await this.permissionRepository.remove(bucketPermission);
+    return true;
   }
 }

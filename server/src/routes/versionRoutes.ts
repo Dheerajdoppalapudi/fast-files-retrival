@@ -1,16 +1,16 @@
 import express from 'express';
-import { approveVersion, rejectVersion, listVersions } from '../controllers/versionController';
+import { approveVersion, rejectVersion, listVersions,downloadVersion } from '../controllers/versionController';
 import { AuthRequest, authenticateToken, authorizeRole } from '../middleware/authMiddleware';
 
 const router = express.Router();
 
-router.post(
-    '/:bucketName/objects/:key/versions/:versionId/approve', 
+router.put(
+    '/:versionId/approve', 
     authenticateToken, 
     approveVersion
   );
-  router.post(
-    '/:bucketName/objects/:key/versions/:versionId/reject', 
+  router.put(
+    '/:versionId/reject', 
     authenticateToken, 
     rejectVersion
   );
@@ -18,5 +18,11 @@ router.post(
     '/:bucketName/objects/:key/versions', 
     authenticateToken, 
     listVersions
+  );
+
+  router.get(
+    '/download/:versionId', 
+    authenticateToken, 
+    downloadVersion
   );
 export default router;

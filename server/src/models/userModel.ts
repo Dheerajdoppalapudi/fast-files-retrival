@@ -1,16 +1,8 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, OneToMany, JoinColumn, Unique, CreateDateColumn ,UpdateDateColumn} from 'typeorm';
 import { Permission } from './Permission';
+import { BaseEntity } from './BaseEntity';
 
-export abstract class BaseEntity {
-  @PrimaryGeneratedColumn('uuid')
-  id!: string;
 
-  @CreateDateColumn({ type: 'datetime' })
-  created_at!: Date;
-
-  @UpdateDateColumn({ type: 'datetime' })
-  updated_at!: Date;
-}
 
 @Entity()
 export class User extends BaseEntity {
@@ -28,8 +20,4 @@ export class User extends BaseEntity {
 
   @OneToMany(() => Permission, (permission) => permission.user)
   permissions!: Permission[];
-
-  
-
-  
 }

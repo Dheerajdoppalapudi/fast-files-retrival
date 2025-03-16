@@ -5,55 +5,51 @@ import { Permission } from './Permission';
 import { Approval } from './Approval';
 import { Approver } from './Approver';
 import { User } from './userModel';
+import { BaseEntity } from './BaseEntity';
+
 
 @Entity({ name: 'MyItems' })
 @Unique(['bucket', 'key'])
-export class MyItem {
-    @PrimaryGeneratedColumn()
-    id!: number;
+export class MyItem extends BaseEntity {
+  @Column({ type: 'varchar', length: 255 })
+  key!: string;
 
-    @Column({ type: 'varchar', length: 255 })
-    key!: string;
+  @ManyToOne(() => Bucket, (bucket) => bucket.objects, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'bucketId' })
+  bucket!: Bucket;
 
-    @ManyToOne(() => Bucket, (bucket) => bucket.objects, { onDelete: 'CASCADE' })
-    @JoinColumn({ name: 'bucketId' })
-    bucket!: Bucket;
+  @Column({ type: 'uuid' })
+  bucketId!: string;
 
-    @Column({ type: 'int' })
-    bucketId!: number;
+  @Column({ type: 'uuid' }) 
+  userId!: string;
 
-    @Column({ type: 'int' }) // User who created the item (owner)
-    userId!: number;
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  owner!: User;
 
-    @ManyToOne(() => User)
-    @JoinColumn({ name: 'userId' })
-    owner!: User;
+  @Column({ type: 'boolean', default: true }) 
+  versioningEnabled!: boolean;
 
-    @Column({ type: 'boolean', default: true }) // Versioning enabled for this item
-    versioningEnabled!: boolean;
+  @Column({ type: 'boolean', default: false }) 
+  requiresApproval!: boolean;
 
-    @Column({ type: 'boolean', default: false }) // Whether this item requires approval
-    requiresApproval!: boolean;
+  @Column({ type: 'uuid', nullable: true }) 
+  defaultApproverId?: string;
 
-    @Column({ type: 'int', nullable: true }) // Default approver for this item
-    defaultApproverId?: number;
+  @ManyToOne(() => Approver, { nullable: true })
+  @JoinColumn({ name: 'defaultApproverId' })
+  defaultApprover?: Approver;
 
-    @ManyToOne(() => Approver, { nullable: true })
-    @JoinColumn({ name: 'defaultApproverId' })
-    defaultApprover?: Approver;
+  @Column({ type: 'varchar', default: 'pending' }) 
+  approvalStatus!: string;
 
-    @Column({ type: 'varchar', default: 'pending' }) // Approval status: 'pending', 'approved', 'rejected'
-    approvalStatus!: string;
+  @OneToMany(() => ObjectVersion, (version) => version.object, { cascade: true, onDelete: 'CASCADE' })
+  versions!: ObjectVersion[];
 
-    @CreateDateColumn({ type: 'datetime' })
-    createdAt!: Date;
+  @OneToMany(() => Permission, (permission) => permission.item)
+  permissions!: Permission[];
 
-    @OneToMany(() => ObjectVersion, (version) => version.object, { cascade: true, onDelete: 'CASCADE' })
-    versions!: ObjectVersion[];
-
-    @OneToMany(() => Permission, (permission) => permission.item)
-    permissions!: Permission[];
-
-    @OneToMany(() => Approval, (approval) => approval.item)
-    approvals!: Approval[];
+  @OneToMany(() => Approval, (approval) => approval.item)
+  approvals!: Approval[];
 }

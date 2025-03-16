@@ -4,7 +4,8 @@ import { AuthRequest } from '../middleware/authMiddleware';
 import { 
   createBucketService,
   assignBucketPermission ,
-  listBucketContentsService,listAllBucketService
+  listBucketContentsService,listAllBucketService,
+  revokeBucketPermission
 } from '../services/bucketService';
 
 
@@ -15,7 +16,7 @@ export const listAllBucket = async (req: AuthRequest, res: Response) => {
     res.status(200).json( bucket );
   }
   catch (error){
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: (error as Error).message });
   }
 }
 
@@ -24,53 +25,58 @@ export const listBucketContents = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     // Get bucketId from query params, if not provided, will show root level
-    const bucketId = req.query.bucketId && req.query.bucketId!= '-1' ? parseInt(req.query.bucketId as string) : undefined;
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-    
-    const contents = await listBucketContentsService(userId, bucketId);
+    const bucketId = req.query.bucketId && req.query.bucketId!= '-1' ? req.query.bucketId : undefined;
+    const contents = await listBucketContentsService(userId, bucketId?.toString());
     res.status(200).json(contents);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: (error as Error).message });
   }
 };
+
 
 export const createBucket = async (req: AuthRequest, res: Response) => {
   try {
     const { bucketName} = req.params;
     const { parentId } = req.query; // Allow passing parent bucket ID as query param
     const userId = req.user?.id;
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
-    }
-    
     const bucket = await createBucketService(bucketName, userId, parentId ? parseInt(parentId as string) : null);
     res.status(200).json({ message: 'Bucket created successfully', bucket });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: (error as Error).message });
   }
 };
 
 export const assignPermission = async (req: AuthRequest, res: Response) => {
   try {
-    const { bucketId, userEmail } = req.params;
+    const { bucketId, userEmail,permissionType } = req.params;
     const userId = req.user?.id;
 
-
-    if(!bucketId){
-      return res.status(500).json({ error: 'BucketID is not provided' });
+    if (!bucketId) {
+      res.status(400).json({ error: 'BucketID is not provided' });
+      return;
     }
-    
-    if (!userId) {
-      return res.status(401).json({ error: 'User not authenticated' });
+    if(!permissionType ||permissionType===undefined){
+      res.status(400).json({ error: 'Permission Type is not given' });
+      return;
     }
-    
-    const result = await assignBucketPermission(bucketId, userId, userEmail);
+    const result = await assignBucketPermission(bucketId, userId, userEmail,permissionType);
     res.status(200).json(result);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: (error as Error).message });
+  }
+};
+
+export const revokePermission = async (req: AuthRequest, res: Response) => {
+  try {
+    const { bucketId, userEmail } = req.params;
+    const userId = req.user?.id;
+    if (!bucketId) {
+      res.status(400).json({ error: 'BucketID is not provided' });
+      return;
+    }
+    const result = await revokeBucketPermission(bucketId, userId, userEmail);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
   }
 };

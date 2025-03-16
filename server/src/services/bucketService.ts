@@ -14,8 +14,8 @@ import { Approval } from "../models/Approval";
 const permissionService = new PermissionService();
 
 export const listBucketContentsService = async (
-  userId: any,
-  bucketId?: number
+  userId: string,
+  bucketId?: string
 ): Promise<any> => {
   return executeTransaction(async (queryRunner) => {
     const bucketRepository = queryRunner.manager.getRepository(Bucket);
@@ -23,6 +23,8 @@ export const listBucketContentsService = async (
     const permissionRepository = queryRunner.manager.getRepository(Permission);
     const approverRepository = queryRunner.manager.getRepository(Approver);
     const approvalRepository = queryRunner.manager.getRepository(Approval);
+
+   
 
     // Step 1: Get all buckets that the user has direct access to
     const userPermissions = await permissionRepository
@@ -32,12 +34,10 @@ export const listBucketContentsService = async (
       .getMany();
 
     // Extract bucket IDs the user has direct permissions to
-    const directAccessBucketIds = new Set<number>();
+    const directAccessBucketIds = new Set<string>();
     userPermissions.forEach((perm) => {
       if (perm.bucket) directAccessBucketIds.add(perm.bucket.id);
     });
-
-    console.log("User Accessible Folders:", Array.from(directAccessBucketIds));
 
     // Check if user is an approver in any approver groups
     const userApproverGroups = await approverRepository
@@ -48,11 +48,10 @@ export const listBucketContentsService = async (
     const userApproverIds = userApproverGroups.map((group) => group.id);
     const isApprover = userApproverIds.length > 0;
 
-    console.log("User is approver in groups:", userApproverIds);
-
+    
     // Step 2: Handle root view or specific folder view
     let folders = [];
-    let currentLocation = { name: "Root" };
+    let currentLocation: { id?: number; name: string; parentId?: number } = { name: "Root" };
 
     if (bucketId === undefined) {
       // At root level - we want to show the top-level accessible folders
@@ -64,7 +63,7 @@ export const listBucketContentsService = async (
       });
 
       // Create a set of all accessible parent IDs
-      const accessibleParentIds = new Set<number>();
+      const accessibleParentIds = new Set<string>();
       accessibleFolders.forEach((folder) => {
         if (folder.parentId && directAccessBucketIds.has(folder.parentId)) {
           accessibleParentIds.add(folder.parentId);
@@ -77,7 +76,7 @@ export const listBucketContentsService = async (
         if (folder.parentId === null) return true;
 
         // Include folders whose parent is not directly accessible to the user
-        return !directAccessBucketIds.has(folder.parentId);
+        return folder.parentId !== undefined && !directAccessBucketIds.has(folder.parentId);
       });
     } else {
       // Inside a specific folder
@@ -109,10 +108,7 @@ export const listBucketContentsService = async (
       }
     }
 
-    console.log(
-      "Fetched Folders:",
-      folders.map((f) => f.id)
-    );
+   
 
     // Step 3: Fetch files in the current bucket (if applicable)
     let files = [];
@@ -128,12 +124,14 @@ export const listBucketContentsService = async (
 
       const permittedFileIds = permittedFilesPermissions
         .map((perm) => perm.item?.id)
-        .filter((id) => id !== undefined) as number[];
+        .filter((id) => id !== undefined) as string[];
 
       // Get files owned by the user in this bucket
       const ownedFiles = await itemRepository.find({
         where: { bucketId, userId },
       });
+
+    
 
       const ownedFileIds = ownedFiles.map((file) => file.id);
 
@@ -146,37 +144,50 @@ export const listBucketContentsService = async (
         // Fetch all accessible files
         const allAccessibleFiles = await itemRepository.find({
           where: { id: In(accessibleFileIds) },
+          relations: ['owner', 'permissions'],  // Include owner details
         });
+
+      
 
         // Process each file to get appropriate versions
         for (const file of allAccessibleFiles) {
           // Get all versions for this file
           // Get all versions for this file with uploader information
           const versions = await queryRunner.manager
-          .getRepository(ObjectVersion)
-          .find({
-            where: { objectId: file.id },
-            relations: ['uploader'], // Include the uploader relation
-            order: { createdAt: 'DESC' }
-          });
-
-
-
-console.log(versions)
+            .getRepository(ObjectVersion)
+            .find({
+              where: { objectId: file.id },
+              relations: ["uploader"], // Include the uploader relation
+              order: { created_at: "DESC" },
+            });
 
           // Filter versions based on user's role and access
           const filteredVersions = await Promise.all(
             versions.map(async (version) => {
               // Case 1: User is the uploader of this version - can see it
+
+              if (version.status === "approved")
+                return {
+                  ...version,...{
+                  uploader: version.uploader
+                    ? version.uploader.username
+                    : "Unknown User",
+                  }
+                };
+              // Case 2: User is an approver for this version - can see it
+
               if (version.userId === userId) {
                 return {
                   ...version,
-                  uploader: version.uploader ? version.uploader.username : 'Unknown User'
+                  uploader: version.uploader
+                    ? version.uploader.username
+                    : "Unknown User",
                 };
               }
 
-              // Case 2: User is an approver for this version - can see it
-              if (isApprover) {
+              // Case 3: Regular user with access - can only see approved versions
+
+              if (isApprover && version.status !== "rejected") {
                 // Check if this user is an approver for this specific version
                 // Check if this user is an approver for this specific version
                 const pendingApproval = await approvalRepository.findOne({
@@ -203,16 +214,17 @@ console.log(versions)
                 if (pendingApproval) {
                   return {
                     ...version,
-                    uploader: version.uploader ? version.uploader.username : 'Unknown User'
+                    ...{
+                      uploader: version.uploader
+                        ? version.uploader.username
+                        : "Unknown User",
+                      requestingApproval: true,
+                    },
                   };
                 }
               }
 
-              // Case 3: Regular user with access - can only see approved versions
-              return version.status === 'approved' ? {
-                ...version,
-                uploader: version.uploader ? version.uploader.username : 'Unknown User'
-              } : null;
+              return null;
             })
           );
 
@@ -222,6 +234,10 @@ console.log(versions)
           // Skip files with no accessible versions
           if (accessibleVersions.length === 0) continue;
 
+          const latestVersion = accessibleVersions.find(it => it.isLatest) || null;
+          const latestVersionWithKey = latestVersion && { ...latestVersion, name: file.key };
+          
+
           // Add file to response with accessible versions
           files.push({
             id: file.id,
@@ -229,14 +245,17 @@ console.log(versions)
             type: "file",
             bucketId: file.bucketId,
             userId: file.userId,
-            latestVersion: accessibleVersions[0]
-              ? {
-                  versionId: accessibleVersions[0].versionId,
-                  size: accessibleVersions[0].size,
-                  createdAt: accessibleVersions[0].createdAt,
-                  status: accessibleVersions[0].status,
-                }
-              : null,
+            created_at: file.created_at,
+            updated_at: file.updated_at,
+            
+            owner: {
+              username: file.owner.username,
+              email: file.owner.email,
+            },
+            permissionType: file.permissions.find(
+              (perm) => perm.itemId === file.id && perm.userId === userId
+            )?.permissionType || null,
+            latestVersion: latestVersionWithKey,
             versions: accessibleVersions,
           });
         }
@@ -249,7 +268,7 @@ console.log(versions)
       name: folder.name,
       type: "folder",
       parentId: folder.parentId,
-      userId: folder.userId,
+      modified:folder.updated_at
     }));
 
     return {
@@ -326,7 +345,8 @@ export const createBucketService = async (
 export const assignBucketPermission = async (
   bucketId: any,
   userId: any,
-  userEmail: string
+  userEmail: string,
+  permissionType: string 
 ): Promise<Permission> => {
   return executeTransaction(async (queryRunner) => {
     const bucketRepository = queryRunner.manager.getRepository(Bucket);
@@ -359,14 +379,53 @@ export const assignBucketPermission = async (
 
     return await permissionService.assignBucketPermission(
       user.id,
-      existingBucket.id
+      existingBucket.id,permissionType.toLowerCase()
     );
   });
 };
 
+export const revokeBucketPermission = async (
+  bucketId: any,
+  userId: any,
+  userEmail: string
+): Promise<void> => {
+  return executeTransaction(async (queryRunner) => {
+    const bucketRepository = queryRunner.manager.getRepository(Bucket);
+    const existingBucket = await bucketRepository.findOne({
+      where: { id: bucketId },
+    });
+
+    if (!existingBucket) throw new Error("Bucket is not Created Yet");
+
+    if (existingBucket.userId !== userId) {
+      const hasWritePermission = await permissionService.hasBucketPermission(
+        userId,
+        existingBucket.id,
+        "write"
+      );
+      if (!hasWritePermission) {
+        throw new Error("You do not have permission to modify this bucket");
+      }
+    }
+
+    const userRepository = queryRunner.manager.getRepository(User);
+
+    const user = await userRepository.findOne({
+      where: { email: userEmail },
+    });
+
+    if (!user) {
+      throw new Error("User does not exist");
+    }
+
+    await permissionService.revokeBucketPermission(user.id, existingBucket.id);
+  });
+};
+
+
 export const updateVersioningService = async (
   bucketName: string,
-  userId: number,
+  userId: string,
   enabled: boolean
 ): Promise<Bucket> => {
   return executeTransaction(async (queryRunner) => {

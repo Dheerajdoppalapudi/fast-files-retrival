@@ -1,5 +1,4 @@
-// src/middleware/authMiddleware.ts
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
 import { UserRepository } from '../repositories/UserRepository';
 import { UserResponse } from '../repositories/UserRepository';
@@ -12,35 +11,42 @@ export interface AuthRequest extends Request {
 }
 
 // Middleware to authenticate JWT token
-export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
+const asyncHandler =
+  <T extends Request = Request>(fn: (req: T, res: Response, next: NextFunction) => Promise<void>) =>
+  (req: T, res: Response, next: NextFunction) => {
+    Promise.resolve(fn(req, res, next)).catch(next);
+  };
+
+export const authenticateToken = asyncHandler<AuthRequest>(async (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN format
 
-  // Check if token exists
   if (!token) {
-    return res.status(401).json({ status: 'error', message: 'Access token required' });
+    res.status(401).json({ status: 'error', message: 'Access token required' });
+    return; // Ensure function returns void
   }
 
   try {
-    // Verify the token
     const decoded = jwt.verify(token, JWT_SECRET) as { id: string };
-
-    // Fetch the user from the database
     const userRepository = new UserRepository();
     const user = await userRepository.findById(decoded.id);
 
-    // Check if user exists
     if (!user) {
-      return res.status(403).json({ status: 'error', message: 'Invalid token' });
+      res.status(403).json({ status: 'error', message: 'Invalid token' });
+      return; 
     }
 
-    // Attach the user to the request (without password)
     req.user = userRepository.toResponse(user);
+    
+    // Remove this check as it's redundant - toResponse already guaranteed to return a UserResponse
+    // The error is likely happening because TypeScript thinks req.user might be undefined after assignment
     next();
   } catch (error) {
-    return res.status(403).json({ status: 'error', message: 'Invalid or expired token' });
+    res.status(403).json({ status: 'error', message: 'Invalid or expired token' });
+    return; // Ensure function returns void
   }
-};
+});
+
 
 // Middleware to authorize roles
 export const authorizeRole = (roles: string[]) => {

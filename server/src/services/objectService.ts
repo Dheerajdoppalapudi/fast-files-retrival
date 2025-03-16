@@ -15,13 +15,13 @@ import { Approval } from '../models/Approval';
 const permissionService = new PermissionService();
 
 
-export const listAllObjectService = async (userId: number, bucketName?: string): Promise<any> => {
+export const listAllObjectService = async (userId: string, bucketName?: string): Promise<any> => {
   return executeTransaction(async (queryRunner) => {
     const itemRepository = queryRunner.manager.getRepository(MyItem);
     const permissionRepository = queryRunner.manager.getRepository(Permission);
     const bucketRepository = queryRunner.manager.getRepository(Bucket);
 
-    let bucketFilter: { bucketId?: number } = {};
+    let bucketFilter: { bucketId?: string } = {};
 
     // Fetch bucket if bucketName is provided
     if (bucketName) {
@@ -34,7 +34,7 @@ export const listAllObjectService = async (userId: number, bucketName?: string):
     const ownedItems = await itemRepository.find({
       where: { userId, ...bucketFilter },
       relations: ['bucket', 'permissions', 'versions'],
-      order: { versions: { createdAt: 'DESC' } }, // Sort versions by latest first
+      order: { versions: { created_at: 'DESC' } }, // Sort versions by latest first
     });
 
     // Fetch permitted items with sorted versions
@@ -58,7 +58,7 @@ export const listAllObjectService = async (userId: number, bucketName?: string):
     const accessItems = permittedItemsList.map((perm) => perm.item).filter((item) => item !== null);
 
     // Combine both owned and accessible items into a unique list
-    const uniqueItems = new Map<number, MyItem>();
+    const uniqueItems = new Map<string, MyItem>();
     [...ownedItems, ...accessItems].forEach((item) => {
       if (item) uniqueItems.set(item.id, item);
     });
@@ -73,8 +73,8 @@ export const uploadObjectService = async (
   bucketName: string,
   key: string,
   file: Express.Multer.File,
-  userId: any,
-  parentId?: number
+  userId: string,
+  parentId?: string
 ): Promise<{ key: string; versionId: string; etag: string; status: string }> => {
   return executeTransaction(async (queryRunner) => {
     const bucketRepository = queryRunner.manager.getRepository(Bucket);
@@ -193,8 +193,10 @@ export const uploadObjectService = async (
           where: { id: approverId },
           relations: ['users']
         });
+       
         
         if (approver) {
+          
           // Check if owner auto-approval is enabled and if user is the owner
           if (shouldOwnerAutoApprove(bucket, myItem) && myItem.userId === userId) {
             // Auto-approve this version
@@ -211,7 +213,8 @@ export const uploadObjectService = async (
             
             // Save the version first to get its ID
             const savedVersion = await versionRepository.save(newVersion);
-            
+
+           
             // Create auto-approval record
             const approval = new Approval();
             approval.objectVersionId = savedVersion.id;
@@ -224,7 +227,7 @@ export const uploadObjectService = async (
             // Needs approval process - set as pending
             newVersion.status = 'pending';
 
-            console.log(approver)
+         
             
             // Don't make it the latest version until approved
             newVersion.isLatest = false;
@@ -262,9 +265,6 @@ export const uploadObjectService = async (
               approval.decision = 'pending';
               await approvalRepository.save(approval);
             }
-            
-            // Notify approvers about pending approval (implementation depends on notification system)
-            // await notifyApprovers(approver, savedVersion, myItem, bucket, userId);
           }
         } else {
           // Approver not found, default to pending status
@@ -282,6 +282,7 @@ export const uploadObjectService = async (
       // No approval required - auto-approve
       newVersion.status = 'approved';
       newVersion.isLatest = true;
+      console.log("vgjhgjhsgdhjgjgjskdgjkskjk")
       
       // If there's a previous latest version, mark it as not latest
       if (latestVersion) {
@@ -313,43 +314,7 @@ function shouldOwnerAutoApprove(bucket: Bucket, item: MyItem): boolean {
   return (bucket.ownerAutoApproves === true);
 }
 
-// Helper function to notify approvers
-async function notifyApprovers(
-  approver: Approver, 
-  version: ObjectVersion, 
-  item: MyItem, 
-  bucket: Bucket, 
-  uploaderId: number
-): Promise<void> {
-  // This would integrate with your notification system
-  // Implementation details will depend on your notification setup
-  
-  // Example implementation (modify as needed):
-  try {
-    // Get uploader details
-    const uploader = await User.findOne({ where: { id: uploaderId } });
-    const uploaderName = uploader ? uploader.name : 'Unknown user';
-    
-    // Prepare notification message
-    const message = `New approval requested: ${item.key} in bucket ${bucket.name} uploaded by ${uploaderName}`;
-    
-    // Send notifications to all users in the approver group
-    for (const user of approver.users) {
-      // Send notification (implementation depends on your system)
-      // Example: await notificationService.send(user.id, message, {
-      //   type: 'approval_request',
-      //   versionId: version.id,
-      //   itemId: item.id,
-      //   bucketId: bucket.id
-      // });
-      
-      console.log(`Notification would be sent to user ${user.id}: ${message}`);
-    }
-  } catch (error) {
-    console.error('Failed to send approval notifications:', error);
-    // Don't throw - notification failure shouldn't block the upload
-  }
-}
+
 
 export const getObjectService = async (
   bucketName: string, 
@@ -390,7 +355,7 @@ export const getObjectService = async (
 export const deleteObjectService = async (
   bucketName: string, 
   key: string, 
-  userId: number, 
+  userId: string, 
   versionId?: string
 ): Promise<{ message: string }> => {
   return executeTransaction(async (queryRunner) => {
@@ -473,7 +438,7 @@ export const deleteObjectService = async (
 
 
 export const assignPermissionToItem =async(userId: any, itemID:any,
-  userEmail:string): Promise<Permission> => {
+  userEmail:string,permissionType: string): Promise<Permission> => {
     return executeTransaction(async (queryRunner) => {
 
             const myItemRepository = queryRunner.manager.getRepository(MyItem);
@@ -502,7 +467,7 @@ export const assignPermissionToItem =async(userId: any, itemID:any,
 
               
             return await permissionService.assignItemPermission(
-                          user.id,existingItem.id
+                          user.id,existingItem.id,permissionType.toLowerCase()
                         )
                   
 
@@ -510,3 +475,49 @@ export const assignPermissionToItem =async(userId: any, itemID:any,
 
     });
   }
+
+  export const revokePermissionFromItem = async (
+    userId: any,
+    itemID: any,
+    userEmail: string
+  ): Promise<void> => {
+    return executeTransaction(async (queryRunner) => {
+      const myItemRepository = queryRunner.manager.getRepository(MyItem);
+      const existingItem = await myItemRepository.findOne({
+        where: { id: itemID },
+      });
+  
+      if (!existingItem) throw new Error("Item is not Created Yet");
+  
+      if (existingItem.userId !== userId) {
+        const hasWritePermission = await permissionService.hasItemPermission(
+          userId,
+          existingItem.id,
+          "write"
+        );
+
+        if (!hasWritePermission) {
+          throw new Error("You do not have permission to modify this Item");
+        }
+      }
+      const userRepository = queryRunner.manager.getRepository(User);
+  
+      const user = await userRepository.findOne({
+        where: { email: userEmail },
+      });
+
+  
+      if (!user) {
+        throw new Error("User does not exist");
+      }
+
+      if(existingItem.userId===user.id){
+        throw new Error("You can not remove the acess of Owner");
+      }
+  
+    
+  
+      await permissionService.revokeItemPermission(user.id, existingItem.id);
+    });
+  };
+  

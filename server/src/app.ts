@@ -44,7 +44,7 @@ app.use('/api/accounts', userRoutes);
 
 app.use('/api/buckets', bucketRoutes);
 app.use('/api/buckets', objectRoutes);
-app.use('/api/buckets', versionRoutes);
+app.use('/api/versions', versionRoutes);
 
 
 // 404 Not Found Middleware
