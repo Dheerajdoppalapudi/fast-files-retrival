@@ -230,6 +230,7 @@ const HomePage = () => {
         visible={versionModalVisible}
         onClose={() => setVersionModalVisible(false)}
         file={currentFile}
+        onrefersh={refresh}
       />
       <NewFolderModal
         visible={newFolderModalVisible}

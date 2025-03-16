@@ -7,11 +7,13 @@ const ShareModal = ({ visible, item, onClose }) => {
   const [selectedUsers, setSelectedUsers] = useState([]);
   const [userOptions, setUserOptions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [selectedPermission, setSelectedPermission] = useState('view')
 
   // Reset state when modal opens
   useEffect(() => {
     if (visible) {
       setSelectedUsers([]);
+      setSelectedPermission('view');
       fetchUsers();
     }
   }, [visible]);
@@ -64,19 +66,22 @@ const ShareModal = ({ visible, item, onClose }) => {
     fetchUsers(value);
   };
 
-  const onShare =async (item,email)=>{
+  const onShare =async (item,email,permissionType)=>{
     if(item&&item.id){
       if (item.isFolder){
         await api.Buckets().shareBucket({
           email:email,
-          bucketId:item.id
+          bucketId:item.id,
+          permissionType:permissionType
+          
         })
 
       }
       else{
         await api.Items().shareItem({
           email:email,
-          itemID:item.id
+          itemID:item.id,
+          permissionType:permissionType
         })
       }
     }
@@ -93,15 +98,20 @@ const ShareModal = ({ visible, item, onClose }) => {
     //   return;
     // }
 
-    if (!selectedUsers){
+    if (!selectedUsers) {
       message.warning('Please select at least one user to share with');
-      return
+      return;
+    }
+
+    if (!selectedPermission) {
+      message.warning('Please select a permission level');
+      return;
     }
 
     try {
       setLoading(true);
       // Use the onShare prop function to handle the actual API call
-      await onShare(item, selectedUsers);
+      await onShare(item, selectedUsers,selectedPermission);
       message.success(`Successfully shared "${item.name}" with selected users`);
       onClose();
     } catch (error) {
@@ -153,6 +163,16 @@ const ShareModal = ({ visible, item, onClose }) => {
           notFoundContent={loading ? 'Loading...' : 'No users found'}
         />
       </div>
+      <p style={{ marginBottom: 8 }}>Select permission:</p>
+        <Select
+          placeholder="Select permission"
+          value={selectedPermission}
+          onChange={setSelectedPermission}
+          style={{ width: '100%' }}
+        >
+          <Select.Option value="view">View</Select.Option>
+          <Select.Option value="Write">Edit</Select.Option>
+        </Select>
     </Modal>
   );
 };

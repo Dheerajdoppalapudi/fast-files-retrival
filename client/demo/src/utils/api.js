@@ -162,6 +162,9 @@ class BaseService {
     Items(){
         return new ItemService(this)
     }
+    Versions(){
+        return new VersionService(this)
+    }
 }
 
 class AccountsService {
@@ -370,12 +373,12 @@ class BucketsService {
 
     }
 
-    async shareBucket ({bucketId,email}){
-        if( !bucketId || !email){
+    async shareBucket ({bucketId,email,permissionType}){
+        if( !bucketId || !email || !permissionType){
             return
         }
         return this.baseService.request(
-            `${this.endpoint}/${bucketId}/assignBucketPermission/${email}`,{
+            `${this.endpoint}/${bucketId}/assignBucketPermission/${email}/${permissionType}`,{
                 method:'PUT'
             }
         )
@@ -406,73 +409,6 @@ class ItemService{
         )
     }
    
-    async getFileWithProgress(filePath, onProgress = () => {}) {
-        return new Promise((resolve, reject) => {
-            const xhr = new XMLHttpRequest();
-            xhr.responseType = 'blob';
-    
-            // Track download progress
-            xhr.addEventListener('progress', (event) => {
-                if (event.lengthComputable) {
-                    const progress = Math.round((event.loaded / event.total) * 100);
-                    onProgress(progress);
-                }
-            });
-    
-            xhr.addEventListener('load', async () => {
-                if (xhr.status === 200) {
-                    const blob = xhr.response;
-                    const fileName = filePath.split('/').pop() || 'download';
-                    
-                    const metadata = {
-                        fileName: fileName,
-                        contentType: blob.type,
-                        fileSize: blob.size,
-                        createdAt: null,
-                        modifiedAt: null,
-                    };
-    
-                    resolve({
-                        blob,
-                        fileName,
-                        metadata,
-                        download: () => this.downloadBlob(blob, fileName),
-                        getUrl: () => window.URL.createObjectURL(blob)
-                    });
-                } else {
-                    let errorMessage = 'Download failed';
-                    try {
-                        const response = JSON.parse(xhr.response);
-                        errorMessage = response.error || response.message || errorMessage;
-                    } catch (e) {
-                        // If response cannot be parsed, use default error message
-                    }
-                    reject(this.baseService.formatResponse(false, null, errorMessage, 'Download failed'));
-                }
-            });
-    
-            xhr.addEventListener('error', () => {
-                reject(this.baseService.formatResponse(false, null, 'Download failed', 'Network error'));
-            });
-    
-            // Determine if the URL is external (starts with http:// or https://)
-            const isExternalUrl = filePath.toLowerCase().startsWith('http');
-            const url = isExternalUrl ? filePath : `${this.baseService.baseURL}${this.endpoint}/files/${filePath}`;
-            
-            // Open and send the request
-            xhr.open('GET', url);
-            
-            // Add authorization header only for internal URLs
-            if (!isExternalUrl) {
-                const authHeader = this.baseService.getAuthHeader();
-                if (authHeader.Authorization) {
-                    xhr.setRequestHeader('Authorization', authHeader.Authorization);
-                }
-            }
-    
-            xhr.send();
-        });
-    }
 
 
     async uploadFileWithProgress({file, BucketName=null, onProgress = () => {}}) {
@@ -482,7 +418,7 @@ class ItemService{
             }
     
             const fileName = encodeURIComponent(file.name); // Ensuring safe URL usage
-            const bucket = BucketName || "Temp";
+            const bucket = BucketName || "Root";
     
             const formData = new FormData();
             formData.append("file", file);
@@ -550,12 +486,12 @@ class ItemService{
         });
     }
 
-    async shareItem ({itemID,email}){
-        if (!itemID ||!email){
+    async shareItem ({itemID,email,permissionType}){
+        if (!itemID ||!email||!permissionType){
             return 
         }
         return this.baseService.request(
-            `${this.endpoint}/${itemID}/assignItemPermission/${email}`,{
+            `${this.endpoint}/${itemID}/assignItemPermission/${email}/${permissionType}`,{
                 method:'PUT',
             }
         )
@@ -563,6 +499,104 @@ class ItemService{
     
 }
 
+
+class VersionService{
+    constructor(baseService) {
+        this.baseService = baseService;
+        this.endpoint = '/versions';
+    }
+
+    async approveVersion ({versionID}){
+        if (!versionID){
+            return 
+        }
+        return this.baseService.request(
+            `${this.endpoint}/${versionID}/approve`,{
+                method:'PUT',
+            }
+        )
+    }
+    async rejectVersion ({versionID}){
+        if (!versionID){
+            return 
+        }
+        return this.baseService.request(
+            `${this.endpoint}/${versionID}/reject`,{
+                method:'PUT',
+            }
+        )
+    }
+
+    async getFileWithProgress({versionID, onProgress = () => {}}) {
+        if(!versionID){
+            return
+        }
+        return new Promise((resolve, reject) => {
+            const xhr = new XMLHttpRequest();
+            xhr.responseType = 'blob';  // Ensure the response is a Blob (for file download)
+    
+            xhr.addEventListener('progress', (event) => {
+                if (event.lengthComputable) {
+                    const progress = Math.round((event.loaded / event.total) * 100);
+                    onProgress(progress);
+                }
+            });
+    
+            xhr.addEventListener('load', async () => {
+                if (xhr.status === 200) {
+                    const blob = xhr.response;
+    
+                    // Extract filename from Content-Disposition header if available
+                    // const contentDisposition = xhr.getResponseHeader('Content-Disposition');
+                    let fileName = `download-${versionID}.bin`;
+                    // if (contentDisposition) {
+                    //     const match = contentDisposition.match(/filename="(.+)"/);
+                    //     if (match) {
+                    //         fileName = match[1];
+                    //     }
+                    // }
+    
+                    resolve({
+                        blob,
+                        download: () => this.downloadBlob(blob, fileName),
+                        getUrl: () => window.URL.createObjectURL(blob),
+                    });
+                } else {
+                    let errorMessage = 'Download failed';
+    
+                    try {
+                        const responseText = await xhr.response.text();
+                        const responseJson = JSON.parse(responseText);
+                        errorMessage = responseJson.error || responseJson.message || errorMessage;
+                    } catch (e) {
+                        // If JSON parsing fails, fallback to default error message
+                    }
+    
+                    reject(this.baseService.formatResponse(false, null, errorMessage, 'Download failed'));
+                }
+            });
+    
+            xhr.addEventListener('error', () => {
+                reject(this.baseService.formatResponse(false, null, 'Download failed due to network error', 'Network error'));
+            });
+    
+            const url = `${this.baseService.baseURL}${this.endpoint}/download/${versionID}`;
+    
+            xhr.open('GET', url);
+            xhr.setRequestHeader('Accept', 'application/octet-stream'); // Indicate file download
+            
+            // Add authorization header only for internal URLs
+            const authHeader = this.baseService.getAuthHeader();
+            if (authHeader.Authorization) {
+                xhr.setRequestHeader('Authorization', authHeader.Authorization);
+            }
+    
+            xhr.send();
+        });
+    }
+    
+
+}
 
 
 

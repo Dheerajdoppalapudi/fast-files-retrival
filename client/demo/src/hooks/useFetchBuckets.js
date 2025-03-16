@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "../utils/api";
+import { formatFileSize } from "../utils/fileUtils";
 
 const useFetchBuckets = () => {
   const [loading, setLoading] = useState(false);
@@ -28,7 +29,7 @@ const useFetchBuckets = () => {
           key: folder.id.toString(),
           id: folder.id,
           name: folder.name,
-          modified: "-", // Folders don't have a modified date in the provided JSON
+          modified:  new Date(folder.modified).toLocaleString(), // Folders don't have a modified date in the provided JSON
           size: "-", // Folders don't have a size
           hasVersions: false, // Folders don't have versions
           isFolder: true,
@@ -38,10 +39,12 @@ const useFetchBuckets = () => {
           key: file.id.toString(),
           id: file.id,
           name: file.name,
-          modified: new Date(file.latestVersion.createdAt).toLocaleString(),
+          modified: new Date(file.latestVersion.created_at).toLocaleString(),
           size: formatFileSize(file.latestVersion.size),
           hasVersions: file.versions.length > 1, // Check if multiple versions exist
           isFolder: false,
+          permissionType:file.permissionType,
+          latestversion:file.latestVersion,
           versions: file.versions, // Include all versions
         })),
       ];
@@ -55,13 +58,7 @@ const useFetchBuckets = () => {
   };
 
   // Format file size
-  const formatFileSize = (bytes) => {
-    if (bytes === 0) return "0 Bytes";
-    const k = 1024;
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-  };
+
 
   // Handle folder navigation
   const handleFolderClick = (folderId, folderName) => {

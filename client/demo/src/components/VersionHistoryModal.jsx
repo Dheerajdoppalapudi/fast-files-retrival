@@ -1,15 +1,18 @@
-import React from "react";
+import React, { version } from "react";
 import { Modal, Timeline, Button, Space, Typography, Tag, Tooltip } from "antd";
 import {
   EyeOutlined,
   DownloadOutlined,
   RollbackOutlined,
   CloseOutlined,
+  CheckOutlined,
 } from "@ant-design/icons";
+import api from "../utils/api";
+import { formatFileSize } from "../utils/fileUtils";
 
 const { Text } = Typography;
 
-const VersionHistoryModal = ({ visible, onClose, file }) => {
+const VersionHistoryModal = ({ visible, onClose, file,onrefersh }) => {
   const [left, setLeft] = React.useState(null);
   const [right, setRight] = React.useState(null);
 
@@ -56,7 +59,56 @@ const VersionHistoryModal = ({ visible, onClose, file }) => {
   };
 
 
-  
+  const versionApproved = async (version) =>{
+    await api.Versions().approveVersion({
+       versionID:version.versionId
+    })
+    if (onrefersh){
+      onrefersh()
+    }
+
+  }
+
+  const rejectApproved = async (version) =>{
+    await api.Versions().rejectVersion({
+       versionID:version.versionId
+    })
+    if (onrefersh){
+      onrefersh()
+    }
+
+  }
+
+  const fileview =async(version)=>{
+    return await api.Versions().getFileWithProgress({
+      versionID: version.versionId, // Pass as first argument
+      onProgress: (progress) => {
+         console.log(`Download Progress: ${progress}%`);
+       }
+     }
+     );
+  }
+
+  const downloadFile = async (version) => {
+    try {
+      const fileData=await fileview(version)
+      if (fileData?.blob) {
+        const url = window.URL.createObjectURL(fileData.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file?.name; // Change extension based on file type
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        console.error('No file data received');
+      
+    }
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
 
   const timeline = (
     <div 
@@ -107,14 +159,18 @@ const VersionHistoryModal = ({ visible, onClose, file }) => {
                   )}
                 </Text>
                 <Text style={{ color: "#aaa", fontSize: "14px" }}>
-                  {version.createdAt}
+                  {new Date(version.created_at).toLocaleDateString('en-US', {
+  day: '2-digit',
+  month: 'long',
+  year: 'numeric',
+})}
                 </Text>
               </div>
 
               {/* Version Details */}
               <div style={{ marginBottom: "12px" }}>
                 <Text style={{ color: "#aaa", fontSize: "14px" }}>
-                  Size: {version.size} • Modified by: {version.uploader}
+                  Size: {formatFileSize(version.size)} • Modified by: {version.uploader}
                 </Text>
               </div>
 
@@ -157,9 +213,16 @@ const VersionHistoryModal = ({ visible, onClose, file }) => {
                     borderColor: "#444",
                     color: "#e6e6e6",
                   }}
+                  onClick={()=>{
+                    downloadFile(version)
+                  }}
                 >
                   Download
                 </Button>
+                
+                {
+                  !version.hasOwnProperty("requestingApproval") &&
+                
                 <Button
                   icon={
                     status ? <RollbackOutlined /> : <CloseOutlined />
@@ -182,6 +245,43 @@ const VersionHistoryModal = ({ visible, onClose, file }) => {
                 >
                   {status ? "Restore" : "Revert"}
                 </Button>
+        }
+
+
+
+               { version.requestingApproval&& <>
+
+                <Button
+                  icon={<CheckOutlined />}
+                  style={{
+                    backgroundColor: "#1a1a1a",
+                    borderColor: "#444",
+                    color: "#e6e6e6",
+                  }}
+                  onClick={()=>{
+                    versionApproved(version)
+                  }}
+                >
+                  Approve
+                </Button>
+
+                <Button
+                  icon={<CloseOutlined />}
+                  style={{
+                    backgroundColor: "#1a1a1a",
+                    borderColor: "#444",
+                    color: "#e6e6e6",
+                  }}
+                  onClick={()=>{
+                    rejectApproved(version)
+                  }}
+                >
+                  Reject
+                </Button>
+               
+               </>
+                }
+
               </div>
             </div>
           </Timeline.Item>

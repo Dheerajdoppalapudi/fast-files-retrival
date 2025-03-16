@@ -11,9 +11,8 @@ const NewFolderModal = ({ visible, onCancel,onSuccess,breadcrumbPath }) => {
     setLoading(true);
     const lastFolder = breadcrumbPath.length > 0 ? breadcrumbPath[breadcrumbPath.length - 1] : null;
     const CreateBucket= await api.Buckets().CreateBucket({
-      BucketName:folderName,
+      BucketName:folderName.trim(),
       parentId:lastFolder?lastFolder.id:null
-
     })
     setLoading(false);
     setFolderName("")
@@ -34,6 +33,7 @@ const NewFolderModal = ({ visible, onCancel,onSuccess,breadcrumbPath }) => {
         <Button
           key="create"
           type="primary"
+          disabled={folderName.length===0}
           onClick={handleCreate}
           loading={loading} // Add loading state to the button
         >
@@ -44,7 +44,7 @@ const NewFolderModal = ({ visible, onCancel,onSuccess,breadcrumbPath }) => {
       <Input
         placeholder="Enter folder name"
         value={folderName}
-        onChange={(e) => setFolderName(e.target.value)}
+        onChange={(e) => setFolderName(e.target.value.trimStart())}
       />
     </Modal>
   );

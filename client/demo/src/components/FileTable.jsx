@@ -1,30 +1,30 @@
-import React, { useState } from 'react';
-import { Table, Space, Tag, Dropdown, Button, Checkbox } from 'antd';
-import { 
-  MoreOutlined, 
-  HistoryOutlined, 
-  DownloadOutlined, 
-  ShareAltOutlined, 
+import React, { useState } from "react";
+import { Table, Space, Tag, Dropdown, Button, Checkbox } from "antd";
+import {
+  MoreOutlined,
+  HistoryOutlined,
+  DownloadOutlined,
+  ShareAltOutlined,
   DeleteOutlined,
   FolderOutlined,
-} from '@ant-design/icons';
+} from "@ant-design/icons";
 
-import FileIcon from './FileIcon';
-import ShareModal from './ShareModal';
+import FileIcon from "./FileIcon";
+import ShareModal from "./ShareModal";
+import api from "../utils/api";
 
 const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange }) => {
   // State for share modal
   const [shareModalVisible, setShareModalVisible] = useState(false);
   const [currentSharedItem, setCurrentSharedItem] = useState(null);
 
-
-  
   // State for row selection
   const [selectedRowKeys, setSelectedRowKeys] = useState([]);
 
   // Helper function to determine file icon based on filename
   const getFileIcon = (fileName, isFolder) => {
-    if (isFolder) return <FolderOutlined style={{ fontSize: '18px', color: '#f0c14b' }} />;
+    if (isFolder)
+      return <FolderOutlined style={{ fontSize: "18px", color: "#f0c14b" }} />;
     return <FileIcon fileName={fileName} />;
   };
 
@@ -37,65 +37,97 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange }) => {
   // Handle row selection change
   const handleSelectionChange = (newSelectedRowKeys) => {
     setSelectedRowKeys(newSelectedRowKeys);
-    
+
     // If there's a parent component handler, call it too
     if (onSelectChange) {
       onSelectChange(newSelectedRowKeys);
     }
   };
 
+  const downloadFile = async (version) => {
+    try {
+      const fileData=await api.Versions().getFileWithProgress({
+       versionID: version.versionId, // Pass as first argument
+       onProgress: (progress) => {
+          console.log(`Download Progress: ${progress}%`);
+        }
+      }
+      );
+      if (fileData?.blob) {
+        const url = window.URL.createObjectURL(fileData.blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = version.name; // Change extension based on file type
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+      } else {
+        console.error('No file data received');
+      
+    }
+    } catch (error) {
+      console.error('Download failed:', error);
+    }
+  };
+  
   // Get contextual menu options based on item type
   const getActionMenu = (record) => {
+    console.log(record)
     const baseOptions = [
-      {
-        key: 'share',
-        label: 'Share',
+      
+      record.permissionType==='write'&&{
+        key: "share",
+        label: "Share",
         icon: <ShareAltOutlined />,
         onClick: () => handleShareClick(record),
       },
-      {
-        key: 'delete',
-        label: 'Delete',
+      record.permissionType==='write'&&{
+        key: "delete",
+        label: "Delete",
         icon: <DeleteOutlined />,
         danger: true,
       },
     ];
-    
+
     // For files only
     if (!record.isFolder) {
       baseOptions.unshift({
-        key: 'download',
-        label: 'Download',
+        key: "download",
+        label: "Download",
         icon: <DownloadOutlined />,
+        onClick: () => {
+          downloadFile(record.latestversion);
+        },
       });
-      
+
       // Version history only for files with versions
       if (record.hasVersions) {
         baseOptions.splice(2, 0, {
-          key: 'versions',
-          label: 'Version History',
+          key: "versions",
+          label: "Version History",
           icon: <HistoryOutlined />,
           onClick: () => onVersionClick(record),
         });
       }
     }
-    
+
     return baseOptions;
   };
 
   const columns = [
     {
-      title: 'Name',
-      dataIndex: 'name',
-      key: 'name',
+      title: "Name",
+      dataIndex: "name",
+      key: "name",
       render: (text, record) => (
         <Space>
           {getFileIcon(text, record.isFolder)}
           <span
-            style={{ 
-              color: 'white', 
-              cursor: 'pointer',
-              fontWeight: record.isFolder ? '500' : 'normal'
+            style={{
+              color: "white",
+              cursor: "pointer",
+              fontWeight: record.isFolder ? "500" : "normal",
             }}
             onClick={() => {
               if (record.isFolder) {
@@ -111,7 +143,7 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange }) => {
             <Tag
               color="#1890ff"
               icon={<HistoryOutlined />}
-              style={{ cursor: 'pointer' }}
+              style={{ cursor: "pointer" }}
               onClick={() => onVersionClick(record)}
             >
               {record.versions?.length || 0} versions
@@ -121,24 +153,32 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange }) => {
       ),
     },
     {
-      title: 'Modified',
-      dataIndex: 'modified',
-      key: 'modified',
-      render: (text) => <span style={{ color: '#cccccc' }}>{text}</span>,
+      title: "Modified",
+      dataIndex: "modified",
+      key: "modified",
+      render: (text) => <span style={{ color: "#cccccc" }}>{text}</span>,
     },
     {
-      title: 'Size',
-      dataIndex: 'size',
-      key: 'size',
-      render: (text) => <span style={{ color: '#cccccc' }}>{text}</span>,
+      title: "Size",
+      dataIndex: "size",
+      key: "size",
+      render: (text) => <span style={{ color: "#cccccc" }}>{text}</span>,
     },
     {
-      title: 'Actions',
-      key: 'actions',
+      title: "Actions",
+      key: "actions",
       width: 100,
       render: (_, record) => (
-        <Dropdown menu={{ items: getActionMenu(record) }} trigger={['click']} placement="bottomRight">
-          <Button type="text" icon={<MoreOutlined />} style={{ color: '#e6e6e6' }} />
+        <Dropdown
+          menu={{ items: getActionMenu(record) }}
+          trigger={["click"]}
+          placement="bottomRight"
+        >
+          <Button
+            type="text"
+            icon={<MoreOutlined />}
+            style={{ color: "#e6e6e6" }}
+          />
         </Dropdown>
       ),
     },
@@ -153,9 +193,9 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange }) => {
       return (
         <Checkbox
           checked={checked}
-          style={{ 
-            borderColor: checked ? '#1890ff' : '#6e6e6e',
-            cursor: 'pointer'
+          style={{
+            borderColor: checked ? "#1890ff" : "#6e6e6e",
+            cursor: "pointer",
           }}
         />
       );
@@ -169,19 +209,21 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange }) => {
     // Ensure checkbox is properly styled in dark mode
     columnTitle: (
       <Checkbox
-        indeterminate={selectedRowKeys.length > 0 && selectedRowKeys.length < data.length}
+        indeterminate={
+          selectedRowKeys.length > 0 && selectedRowKeys.length < data.length
+        }
         checked={data.length > 0 && selectedRowKeys.length === data.length}
         onChange={(e) => {
           if (e.target.checked) {
             // Select all rows
-            handleSelectionChange(data.map(item => item.key || item.id));
+            handleSelectionChange(data.map((item) => item.key || item.id));
           } else {
             // Clear selection
             handleSelectionChange([]);
           }
         }}
-        style={{ 
-          borderColor: selectedRowKeys.length > 0 ? '#1890ff' : '#6e6e6e' 
+        style={{
+          borderColor: selectedRowKeys.length > 0 ? "#1890ff" : "#6e6e6e",
         }}
       />
     ),
@@ -189,76 +231,80 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange }) => {
 
   return (
     <>
-      <Table 
+      <Table
         rowSelection={rowSelection}
-        columns={columns} 
-        dataSource={data.map(item => ({
+        columns={columns}
+        dataSource={data.map((item) => ({
           ...item,
           key: item.key || item.id, // Ensure each row has a key property
-        }))} 
+        }))}
         pagination={false}
-        rowClassName={(record) => 
-          selectedRowKeys.includes(record.key || record.id) ? 'dark-table-row selected-row' : 'dark-table-row'
+        rowClassName={(record) =>
+          selectedRowKeys.includes(record.key || record.id)
+            ? "dark-table-row selected-row"
+            : "dark-table-row"
         }
         size="middle"
-        style={{ backgroundColor: 'transparent' }}
+        style={{ backgroundColor: "transparent" }}
         className="dark-mode-table"
         showHeader={true}
         headerBorderRadius={0}
         tableLayout="fixed"
-        locale={{ emptyText: 'No items in this location' }}
+        locale={{ emptyText: "No items in this location" }}
         onRow={(record) => ({
           onClick: (event) => {
             // Don't toggle selection when clicking on elements that have their own click handlers
             if (
-              event.target.tagName === 'SPAN' && 
-              event.target.style.cursor === 'pointer'
+              event.target.tagName === "SPAN" &&
+              event.target.style.cursor === "pointer"
             ) {
               return;
             }
-            
+
             // Don't toggle when clicking action buttons
             if (
-              event.target.tagName === 'BUTTON' || 
-              event.target.closest('button') || 
-              event.target.closest('.ant-dropdown-trigger')
+              event.target.tagName === "BUTTON" ||
+              event.target.closest("button") ||
+              event.target.closest(".ant-dropdown-trigger")
             ) {
               return;
             }
-            
+
             // Toggle selection for this row
             const key = record.key || record.id;
             const selectedIndex = selectedRowKeys.indexOf(key);
             const newSelectedRowKeys = [...selectedRowKeys];
-            
+
             if (selectedIndex >= 0) {
               newSelectedRowKeys.splice(selectedIndex, 1);
             } else {
               newSelectedRowKeys.push(key);
             }
-            
+
             handleSelectionChange(newSelectedRowKeys);
           },
-          style: { 
-            borderBottom: '1px solid #333',
-            backgroundColor: selectedRowKeys.includes(record.key || record.id) ? '#2a3f5f' : '#1a1a1a',
-            transition: 'background-color 0.3s'
+          style: {
+            borderBottom: "1px solid #333",
+            backgroundColor: selectedRowKeys.includes(record.key || record.id)
+              ? "#2a3f5f"
+              : "#1a1a1a",
+            transition: "background-color 0.3s",
           },
           onMouseEnter: (e) => {
             if (!selectedRowKeys.includes(record.key || record.id)) {
-              e.currentTarget.style.backgroundColor = '#222';
+              e.currentTarget.style.backgroundColor = "#222";
             }
           },
           onMouseLeave: (e) => {
             if (!selectedRowKeys.includes(record.key || record.id)) {
-              e.currentTarget.style.backgroundColor = '#1a1a1a';
+              e.currentTarget.style.backgroundColor = "#1a1a1a";
             }
-          }
+          },
         })}
       />
 
       {/* Import the ShareModal component */}
-      <ShareModal 
+      <ShareModal
         visible={shareModalVisible}
         item={currentSharedItem}
         onClose={() => setShareModalVisible(false)}
@@ -269,29 +315,32 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange }) => {
         .dark-mode-table .selected-row {
           background-color: #2a3f5f !important;
         }
-        
+
         .dark-mode-table .ant-table-cell-row-hover {
           background-color: #222 !important;
         }
-        
+
         .dark-mode-table .selected-row:hover {
           background-color: #2a3f5f !important;
         }
-        
+
         .dark-mode-table .ant-checkbox-wrapper .ant-checkbox-inner {
           background-color: transparent;
           border-color: #6e6e6e;
         }
-        
-        .dark-mode-table .ant-checkbox-wrapper .ant-checkbox-checked .ant-checkbox-inner {
+
+        .dark-mode-table
+          .ant-checkbox-wrapper
+          .ant-checkbox-checked
+          .ant-checkbox-inner {
           background-color: #1890ff;
           border-color: #1890ff;
         }
-        
+
         .dark-mode-table .ant-table-selection-column {
           padding-left: 16px;
         }
-        
+
         .dark-mode-table .ant-table-selection-extra {
           color: #e6e6e6;
         }
