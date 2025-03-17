@@ -4,7 +4,10 @@ import { HomeOutlined } from '@ant-design/icons';
 
 const { Title } = Typography;
 
-const BreadcrumbComponent = ({ currentView, searchQuery, breadcrumbPath, navigateToBreadcrumb }) => {
+const BreadcrumbComponent = ({ currentView, searchQuery, breadcrumbPath, navigateToBreadcrumb,currentCategory }) => {
+
+
+
   if (currentView === 'search') {
     return (
       <Breadcrumb 
@@ -13,7 +16,7 @@ const BreadcrumbComponent = ({ currentView, searchQuery, breadcrumbPath, navigat
         items={[
           {
             title: <span style={{ color: '#e6e6e6', cursor: 'pointer' }} onClick={() => navigateToBreadcrumb(-1)}>
-              <HomeOutlined /> All files
+              <HomeOutlined /> {currentCategory.title}
             </span>,
           },
           {
@@ -33,7 +36,7 @@ const BreadcrumbComponent = ({ currentView, searchQuery, breadcrumbPath, navigat
             style={{ color: '#e6e6e6', cursor: 'pointer' }} 
             onClick={() => navigateToBreadcrumb(-1)}
           >
-            <HomeOutlined /> All files
+            <HomeOutlined />{currentCategory.title}
           </span>
         </Breadcrumb.Item>
         
@@ -56,7 +59,7 @@ const BreadcrumbComponent = ({ currentView, searchQuery, breadcrumbPath, navigat
   } else {
     return (
       <Title level={4} style={{ color: 'white', margin: 0 }}>
-        <HomeOutlined /> All files
+        <HomeOutlined /> {currentCategory.title}
       </Title>
     );
   }

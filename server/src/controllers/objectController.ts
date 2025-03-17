@@ -8,6 +8,7 @@ import {
   listAllObjectService,
   assignPermissionToItem,
   revokePermissionFromItem,
+  getUserAccessListForItem,
 } from "../services/objectService";
 import { listAllBucketService } from "../services/bucketService";
 
@@ -139,3 +140,20 @@ export const revokePermission = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: (error as Error).message });
   }
 };
+
+export const listUserAccessOfItem = async (req: AuthRequest, res: Response) => {
+  try {
+    const { itemID } = req.params;
+    const userId = req.user?.id;
+
+    if (itemID == undefined || itemID == null) {
+      res.status(400).json({ error: "Item is not provided" });
+      return;
+    }
+    const result = await getUserAccessListForItem(userId, itemID);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+};
+

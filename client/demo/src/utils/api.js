@@ -383,16 +383,39 @@ class BucketsService {
             }
         )
     }
+    async removeBucketShare ({bucketId,email}){
+        if (!bucketId ||!email){
+            return 
+        }
+        return this.baseService.request(
+            `${this.endpoint}/${bucketId}/revokeBucketPermission/${email}`,{
+                method:'DELETE',
+            }
+        )
+    }
 
     async listAllContent({bucketId}){
         return this.baseService.request(
             `${this.endpoint}${bucketId?"?bucketId="+bucketId:""}`
         )
     }
+    async listAllContentbyExtension({extension}){
+        
+        return this.baseService.request(
+            `${this.endpoint}/extension/${extension}`
+        )
+    }
+    async getBucketShares ({bucketId}) {
 
+        if(!bucketId){
+            return
+        }
 
+        return this.baseService.request(
+            `${this.endpoint}/${bucketId}/listuserAcessOfBucket`
+        )
 
-
+    }
 
 
 }
@@ -487,7 +510,7 @@ class ItemService{
     }
 
     async shareItem ({itemID,email,permissionType}){
-        if (!itemID ||!email||!permissionType){
+        if (!itemID ||!email){
             return 
         }
         return this.baseService.request(
@@ -495,6 +518,27 @@ class ItemService{
                 method:'PUT',
             }
         )
+    }
+    async removeItemShare ({itemID,email}){
+        if (!itemID ||!email){
+            return 
+        }
+        return this.baseService.request(
+            `${this.endpoint}/${itemID}/revokeItemPermission/${email}`,{
+                method:'DELETE',
+            }
+        )
+    }
+    async getItemShares ({itemID}) {
+
+        if(!itemID){
+            return
+        }
+
+        return this.baseService.request(
+            `${this.endpoint}/${itemID}/listuserAcessOfItem`
+        )
+
     }
     
 }

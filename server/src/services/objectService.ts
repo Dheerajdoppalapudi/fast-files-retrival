@@ -521,3 +521,36 @@ export const assignPermissionToItem =async(userId: any, itemID:any,
     });
   };
   
+  export const getUserAccessListForItem = async (userId: any, itemID: any) :Promise<any>  => {
+    return executeTransaction(async (queryRunner) => {
+      const myItemRepository = queryRunner.manager.getRepository(MyItem);
+      const existingItem = await myItemRepository.findOne({
+        where: { id: itemID },
+      });
+  
+      if (!existingItem) throw new Error("Item is not created yet");
+  
+      if (existingItem.userId !== userId) {
+        const hasReadPermission = await permissionService.hasItemPermission(
+          userId,
+          existingItem.id,
+          "write"
+        );
+        if (!hasReadPermission) {
+          throw new Error("You do not have permission to view this item’s access list");
+        }
+      }
+  
+      const itemPermissions = await permissionService.getItemPermissions(existingItem.id);
+      
+      
+      return itemPermissions.map((it)=>({
+        username:it.user.username,
+        email:it.user.email,
+        permissionType:it.permissionType
+        
+        
+      }))
+    });
+  };
+  

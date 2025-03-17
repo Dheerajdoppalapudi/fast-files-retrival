@@ -11,12 +11,33 @@ export class PermissionService {
     return !!bucketPermission;
   }
 
+  async getBucketPermissions(bucketId: string): Promise<Permission[]> {
+    const bucketPermissions = await this.permissionRepository.find({
+      where: { bucketId },
+      relations:['user']
+    });
+
+  
+    return bucketPermissions
+  }
+  
+
   async hasItemPermission(userId: any, itemId: string, permissionType: string = 'write'): Promise<boolean> {
     const itemPermission = await this.permissionRepository.findOne({
       where: { userId, itemId, permissionType },
     });
     return !!itemPermission;
   }
+
+  async getItemPermissions(itemId: string): Promise<Permission[]> {
+    const itemPermissions = await this.permissionRepository.find({
+      where: { itemId },
+      relations:['user']
+    });
+  
+    return itemPermissions
+  }
+  
 
   async assignItemPermission(userId: any, itemId?: string, permissionType: string = 'write'): Promise<Permission> {
     const isPermissionExist = await this.permissionRepository.findOne({

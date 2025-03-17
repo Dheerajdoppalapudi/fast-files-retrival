@@ -5,7 +5,9 @@ import {
   createBucketService,
   assignBucketPermission ,
   listBucketContentsService,listAllBucketService,
-  revokeBucketPermission
+  revokeBucketPermission,
+  listFilesByExtensionService,
+  getUserAccessList
 } from '../services/bucketService';
 
 
@@ -20,6 +22,21 @@ export const listAllBucket = async (req: AuthRequest, res: Response) => {
   }
 }
 
+export const listBucketContentswithExtension = async (req: AuthRequest, res: Response) => {
+
+  try{
+  const userId = req.user?.id;
+  // Get bucketId from query params, if not provided, will show root level
+  const {extension}=req.params
+
+  const contents = await listFilesByExtensionService(userId,extension );
+  res.status(200).json(contents);
+} catch (error) {
+  res.status(500).json({ error: (error as Error).message });
+
+
+}
+}
 
 export const listBucketContents = async (req: AuthRequest, res: Response) => {
   try {
@@ -39,12 +56,29 @@ export const createBucket = async (req: AuthRequest, res: Response) => {
     const { bucketName} = req.params;
     const { parentId } = req.query; // Allow passing parent bucket ID as query param
     const userId = req.user?.id;
-    const bucket = await createBucketService(bucketName, userId, parentId ? parseInt(parentId as string) : null);
+    const bucket = await createBucketService(bucketName, userId, parentId ? parentId : null);
     res.status(200).json({ message: 'Bucket created successfully', bucket });
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
   }
 };
+
+export const listUserAccessOfBucket = async (req: AuthRequest, res: Response) => {
+  try {
+    const { bucketId } = req.params;
+    const userId = req.user?.id;
+
+    if (!bucketId) {
+      res.status(400).json({ error: 'BucketID is not provided' });
+      return;
+    }
+    const result = await getUserAccessList(bucketId, userId);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+};
+
 
 export const assignPermission = async (req: AuthRequest, res: Response) => {
   try {

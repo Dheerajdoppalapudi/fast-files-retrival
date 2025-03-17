@@ -13,7 +13,7 @@ import VersionHistoryModal from "./components/VersionHistoryModal";
 import BreadcrumbComponent from "./components/Breadcrumb";
 import SearchBar from "./components/SearchBar";
 import NewFolderModal from "./components/NewFolderModal";
-import useFetchBuckets from "./hooks/useFetchBuckets"; // Import the custom hook
+import useFetchBuckets from "./hooks/useFetchBuckets";
 import useFileUpload from "./hooks/useFileUpload";
 import UploadModal from "./components/UploadModal";
 
@@ -26,17 +26,19 @@ const HomePage = () => {
   const [versionModalVisible, setVersionModalVisible] = useState(false);
   const [currentFile, setCurrentFile] = useState(null);
   const [newFolderModalVisible, setNewFolderModalVisible] = useState(false);
-
-  const { 
-    loading, 
-    data: tableData, 
-    error, 
-    refresh, 
-    currentFolder, 
+ 
+  const {
+    loading,
+    data: tableData,
+    error,
+    currentCategory,
+    refresh,
+    currentLocation,
     breadcrumbPath,
     handleFolderClick,
     handleBreadcrumbClick,
-    navigateToBreadcrumb
+    navigateToBreadcrumb,
+    handleCategoryChange, // Get the category change handler
   } = useFetchBuckets();
 
   const {
@@ -78,21 +80,13 @@ const HomePage = () => {
     setVersionModalVisible(true);
   };
 
-  // Go back to root folder
-  const handleRootClick = () => {
-    handleBreadcrumbClick();
-    setCurrentView("main");
-  };
-
   const getCurrentBucketName = () => {
     if (breadcrumbPath.length > 0) {
-      // Return the name of the current folder
       return breadcrumbPath[breadcrumbPath.length - 1].name;
     }
-    return null; // Root level
+    return null;
   };
 
-  // Display error message if there's an error
   if (error) {
     message.error("Failed to fetch data. Please try again.");
   }
@@ -103,7 +97,7 @@ const HomePage = () => {
         width={200}
         style={{ backgroundColor: "#121212", borderRight: "1px solid #333" }}
       >
-        <Sidebar onCategoryClick={handleRootClick} />
+        <Sidebar onCategoryClick={handleCategoryChange} selectedKeys={currentCategory} />
       </Sider>
       <Content style={{ backgroundColor: "#121212", padding: "20px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -112,6 +106,7 @@ const HomePage = () => {
             searchQuery={searchQuery}
             breadcrumbPath={breadcrumbPath}
             navigateToBreadcrumb={navigateToBreadcrumb}
+            currentCategory={currentCategory}
           />
           <SearchBar
             searchQuery={searchQuery}
@@ -201,7 +196,6 @@ const HomePage = () => {
             className="custom-scrollbar"
           >
             {loading ? (
-              // Skeleton Loading Effect
               <div style={{ padding: "16px" }}>
                 {[...Array(5)].map((_, index) => (
                   <Skeleton
@@ -235,7 +229,7 @@ const HomePage = () => {
       <NewFolderModal
         visible={newFolderModalVisible}
         onCancel={() => setNewFolderModalVisible(false)}
-        currentFolder={currentFolder}
+        currentFolder={currentLocation}
         onSuccess={refresh}
         breadcrumbPath={breadcrumbPath}
       />

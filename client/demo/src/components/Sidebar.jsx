@@ -15,31 +15,37 @@ import {
 
 const { Sider } = Layout;
 
-const Sidebar = ({ onCategoryClick }) => {
+const Sidebar = ({ onCategoryClick,selectedKeys }) => {
+  console.log(selectedKeys)
   const sidebarItems = [
-    { key: 'All files', icon: <FolderOutlined style={{ color: '#1890ff' }} />, title: 'All files' },
-    { key: 'Documents', icon: <FileTextOutlined />, title: 'Documents' },
-    { key: 'PDFs', icon: <FilePdfOutlined />, title: 'PDFs' },
+    { key: 'All files', icon: <FolderOutlined  />, title: 'All files' },
+    { key: 'txt', icon: <FileTextOutlined />, title: 'Documents' },
+    { key: 'pdf', icon: <FilePdfOutlined />, title: 'PDFs' },
     { key: 'Spreadsheets', icon: <FileExcelOutlined />, title: 'Spreadsheets' },
-    { key: 'Word Files', icon: <FileWordOutlined />, title: 'Word Files' },
+    { key: 'docx', icon: <FileWordOutlined />, title: 'Word Files' },
     { key: 'Other', icon: <FileOutlined />, title: 'Other' },
     { key: 'Version History', icon: <HistoryOutlined />, title: 'Version History' },
   ];
+
+
 
   return (
     <Sider width={200} style={{ backgroundColor: '#121212', borderRight: '1px solid #333' }}>
       <Menu
         mode="inline"
-        selectedKeys={['All files']}
+        // defaultSelectedKeys={['All files']}
+        selectedKeys={[selectedKeys.key]}
         style={{ backgroundColor: '#121212', borderRight: 0 }}
         onClick={(item) => {
-          if (item.key === 'All files') {
-            onCategoryClick();
-          }
+          const clickedItem = sidebarItems.find(it=> it.key === item.key);
+          onCategoryClick(clickedItem); // Pass the selected category key
         }}
       >
         {sidebarItems.map(item => (
-          <Menu.Item key={item.key} icon={item.icon} style={{ backgroundColor: '#121212', color: '#e6e6e6' }}>
+          <Menu.Item key={item.key}  icon={item.icon}  style={{ 
+            color: selectedKeys.key === item.key ? ' #1890ff ' : '#e6e6e6',
+            fontWeight: selectedKeys.key === item.key ? 'bold' : 'normal',
+          }}>
             {item.title}
           </Menu.Item>
         ))}
