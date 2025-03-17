@@ -29,7 +29,7 @@ export class ObjectVersion extends BaseEntity {
   @Column({ type: 'int' }) 
   size!: number;
 
-  @Column({ type: 'varchar', length: 255, unique: true }) 
+  @Column({ type: 'varchar', length: 255 }) 
   etag!: string;
 
   @Column({ type: 'boolean', default: false }) 
