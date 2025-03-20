@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
-export const STORAGE_DIR = process.env.STORAGE_DIR || './storage';
+export const STORAGE_DIR = path.join(process.env.STORAGE_DIR || '', './storage');
 
 export const getObjectPath = (bucketName: string, key: string, versionId: string): string => {
   const dir = path.join(STORAGE_DIR, bucketName);

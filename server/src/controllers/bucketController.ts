@@ -7,7 +7,8 @@ import {
   listBucketContentsService,listAllBucketService,
   revokeBucketPermission,
   listFilesByExtensionService,
-  getUserAccessList
+  getUserAccessList,
+  ApprovalItemList
 } from '../services/bucketService';
 
 
@@ -114,3 +115,15 @@ export const revokePermission = async (req: AuthRequest, res: Response) => {
     res.status(500).json({ error: (error as Error).message });
   }
 };
+
+
+export const ApprovalItem = async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user?.id;
+    const result = await ApprovalItemList(userId);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+
+}

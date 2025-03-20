@@ -30,7 +30,7 @@ export const listAllObject = async (req: AuthRequest, res: Response) => {
 
 export const uploadObject = async (req: AuthRequest, res: Response) => {
   try {
-    const { bucketName, key } = req.params;
+    const { bucketId, key } = req.params;
     const file = req.file;
     const userId = req.user?.id;
 
@@ -39,7 +39,7 @@ export const uploadObject = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const result = await uploadObjectService(bucketName, key, file, userId);
+    const result = await uploadObjectService(bucketId, key, file, userId);
     res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });
@@ -72,16 +72,15 @@ export const getObject = async (req: AuthRequest, res: Response) => {
 
 export const deleteObject = async (req: AuthRequest, res: Response) => {
   try {
-    const { bucketName, key } = req.params;
+    const { ItemId } = req.params;
     const { versionId } = req.query;
     const userId = req.user?.id;
+   
     const result = await deleteObjectService(
-      bucketName,
-      key,
+      ItemId,
       userId,
-      versionId as string | undefined
+      versionId
     );
-
     res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });

@@ -18,7 +18,7 @@ export const approveVersionService = async (
   return executeTransaction(async (queryRunner) => {
     const versionRepository = queryRunner.manager.getRepository(ObjectVersion);
 
-    const version = await versionRepository.findOne({ where: { versionId } });
+    const version = await versionRepository.findOne({ where: { id:versionId } });
     if (!version) throw new Error('Version not found');
 
     // Get the item associated with the version
@@ -41,30 +41,31 @@ export const approveVersionService = async (
     const userApproverGroups = await queryRunner.manager.getRepository(Approver)
     .createQueryBuilder("approver")
     .innerJoin("approver.users", "user", "user.id = :userId", { userId })
+    .andWhere("approver.name LIKE :namePattern", { namePattern: `file_${myItem.id}%` })
     .getMany();
 
-    const userApproverIds = userApproverGroups.map((group) => group.id);
-   
+
+      const userApproverIds = userApproverGroups.map((group) => group.id);
       const approvalRepository=await queryRunner.manager.getRepository(Approval);
+
       const pendingApproval =  await approvalRepository.findOne({
                         where: [
                           // Case 1: Direct user approval (unanimous approval case)
                           {
                             objectVersionId: version.id,
                             approverId: In(userApproverIds),
-                            userId: userId,
                             decision: "pending",
                           },
                           // Case 2: Group approval with no specific user assigned yet (standard approval case)
                           {
                             objectVersionId: version.id,
                             approverId: In(userApproverIds),
-                            userId: IsNull(),
                             decision: "pending",
                           },
                         ],
                       })
-                      console.log(pendingApproval,version,userId)
+
+    
       if (!pendingApproval) {
         throw new Error('You do not have permission to approve this version');
       }
@@ -96,7 +97,7 @@ export const approveVersionService = async (
     return executeTransaction(async (queryRunner) => {
       const versionRepository = queryRunner.manager.getRepository(ObjectVersion);
   
-      const version = await versionRepository.findOne({ where: { versionId } });
+      const version = await versionRepository.findOne({ where: { id:versionId } });
       if (!version) throw new Error('Version not found');
   
       // Get the item associated with the version
@@ -124,14 +125,14 @@ export const approveVersionService = async (
                           {
                             objectVersionId: version.id,
                             approverId: In(userApproverIds),
-                            userId: userId,
+                           
                             decision: "pending",
                           },
                           // Case 2: Group approval with no specific user assigned yet (standard approval case)
                           {
                             objectVersionId: version.id,
                             approverId: In(userApproverIds),
-                            userId: IsNull(),
+                           
                             decision: "pending",
                           },
                         ],
@@ -153,7 +154,7 @@ export const approveVersionService = async (
       if (!bucket) throw new Error('Bucket not found');
   
       // Delete the file
-      const objectPath = getObjectPath(bucket.name, myItem.key, version.versionId);
+      const objectPath = getObjectPath(bucket.name, myItem.key, version.id);
       deleteFile(objectPath);
   
       // Mark the version as rejected

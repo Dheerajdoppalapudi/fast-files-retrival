@@ -70,7 +70,7 @@ export const listAllObjectService = async (userId: string, bucketName?: string):
 
 
 export const uploadObjectService = async (
-  bucketName: string,
+  bucketId: string,
   key: string,
   file: Express.Multer.File,
   userId: string,
@@ -85,7 +85,7 @@ export const uploadObjectService = async (
     const userRepository = queryRunner.manager.getRepository(User);
 
     // Get the bucket
-    const bucket = await bucketRepository.findOne({ where: { name: bucketName, parentId } });
+    const bucket = await bucketRepository.findOne({ where: { id: bucketId, parentId } });
     if (!bucket) throw new Error('Bucket not found');
 
     // Check bucket permissions if user is not the owner
@@ -128,7 +128,7 @@ export const uploadObjectService = async (
       // If approval required and no default approver inherited, create an approver group
       if (myItem.requiresApproval && !myItem.defaultApproverId) {
         const ownerApprover = new Approver();
-        ownerApprover.name = `Approvers for ${key}`;
+        ownerApprover.name = `file_${myItem.id}`;
         ownerApprover.isGroup = false;
         ownerApprover.approvalType = 'standard';
         ownerApprover.minApprovals = 1;
@@ -296,14 +296,15 @@ export const uploadObjectService = async (
     }
 
     // Save the file to the final location
-    const objectPath = getObjectPath(bucketName, key, versionId);
+    const objectPath = getObjectPath(bucket.name, key, newVersion.id);
     fs.renameSync(file.path, objectPath);
 
     return { 
       key, 
-      versionId, 
+       
       etag, 
-      status: newVersion.status 
+      status: newVersion.status ,
+      versionId:newVersion.id
     };
   });
 };
@@ -324,6 +325,7 @@ export const getObjectService = async (
   const bucketRepository = AppDataSource.getRepository(Bucket);
   const myItemRepository = AppDataSource.getRepository(MyItem);
   const versionRepository = AppDataSource.getRepository(ObjectVersion);
+  
 
   const bucket = await bucketRepository.findOne({ where: { name: bucketName } });
   if (!bucket) throw new Error('Bucket not found');
@@ -334,7 +336,7 @@ export const getObjectService = async (
   let version;
   if (versionId) {
     version = await versionRepository.findOne({ 
-      where: { objectId: myItem.id, versionId, status: 'approved' } 
+      where: { objectId: myItem.id, id:versionId, status: 'approved' } 
     });
     if (!version) throw new Error('Version not found or not approved');
   } else {
@@ -346,15 +348,14 @@ export const getObjectService = async (
 
   if (version.deleteMarker) throw new Error('Object deleted');
 
-  const objectPath = getObjectPath(bucketName, key, version.versionId);
+  const objectPath = getObjectPath(bucketName, key, version.id);
   if (!fs.existsSync(objectPath)) throw new Error('Object data not found');
 
   return { filePath: objectPath, version };
 };
 
 export const deleteObjectService = async (
-  bucketName: string, 
-  key: string, 
+  ItemId: string, 
   userId: string, 
   versionId?: string
 ): Promise<{ message: string }> => {
@@ -363,13 +364,13 @@ export const deleteObjectService = async (
     const myItemRepository = queryRunner.manager.getRepository(MyItem);
     const versionRepository = queryRunner.manager.getRepository(ObjectVersion);
 
-    // Get the bucket
-    const bucket = await bucketRepository.findOne({ where: { name: bucketName } });
-    if (!bucket) throw new Error('Bucket not found');
-
-    // Get the item
-    const myItem = await myItemRepository.findOne({ where: { bucketId: bucket.id, key } });
+    const myItem = await myItemRepository.findOne({ where: { id:ItemId } });
     if (!myItem) throw new Error('Item not found');
+
+    const myBucket = await bucketRepository.findOne({ where: { id:myItem.bucketId } });
+    if (!myBucket) throw new Error('Bucket not found');
+
+
 
     // Check permissions
     if (myItem.userId !== userId) {
@@ -382,40 +383,24 @@ export const deleteObjectService = async (
     if (versionId) {
       // Delete specific version
       const version = await versionRepository.findOne({
-        where: { objectId: myItem.id, versionId }
+        where: { objectId: myItem.id, id:versionId }
       });
       
       if (!version) throw new Error('Version not found');
       
       // Delete the file
-      const objectPath = getObjectPath(bucketName, key, version.versionId);
-      deleteFile(objectPath);
+      const objectPath = getObjectPath(myBucket.name, myItem.key, version.id);
       
       // If this is the latest version, create a delete marker
       if (version.isLatest && myItem.versioningEnabled) {
         // Create a delete marker
-        const deleteMarker = new ObjectVersion();
-        deleteMarker.objectId = myItem.id;
-        deleteMarker.versionId = uuidv4();
-        deleteMarker.userId = userId;
-        deleteMarker.size = 0;
-        deleteMarker.etag = '';
-        deleteMarker.isLatest = true;
-        deleteMarker.deleteMarker = true;
-        deleteMarker.status = 'approved';
-        
-        // Mark previous latest as not latest
-        await versionRepository.update(
-          { objectId: myItem.id, isLatest: true },
-          { isLatest: false }
-        );
-        
-        await versionRepository.save(deleteMarker);
-        
-        return { message: 'Version deleted and delete marker created' };
+        throw new Error("You can not delete the latest version . else Delete the file")
+       
+       
       } else {
         // Just delete the version
         await versionRepository.delete(version.id);
+        deleteFile(objectPath);
         return { message: 'Version deleted successfully' };
       }
     } else {
@@ -424,10 +409,9 @@ export const deleteObjectService = async (
       
       // Delete all version files
       for (const version of versions) {
-        const objectPath = getObjectPath(bucketName, key, version.versionId);
+        const objectPath = getObjectPath(myBucket.name, myItem.key, version.id);
         deleteFile(objectPath);
       }
-      
       // Delete the item and all its versions from database
       await myItemRepository.delete(myItem.id);
       

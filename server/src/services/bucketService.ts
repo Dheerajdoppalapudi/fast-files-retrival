@@ -14,153 +14,146 @@ import { Approval } from "../models/Approval";
 const permissionService = new PermissionService();
 
 
-  export const listBucketContentsService = async (
-    userId: string,
-    bucketId?: string
-  ): Promise<any> => {
-    return executeTransaction(async (queryRunner) => {
-      const bucketRepository = queryRunner.manager.getRepository(Bucket);
-      const itemRepository = queryRunner.manager.getRepository(MyItem);
-      const permissionRepository = queryRunner.manager.getRepository(Permission);
-      const approverRepository = queryRunner.manager.getRepository(Approver);
-      const approvalRepository = queryRunner.manager.getRepository(Approval);
-  
-      // Step 1: Get all buckets that the user has direct access to (with permission types in one query)
-      const userPermissions = await permissionRepository
-        .createQueryBuilder("permission")
-        .leftJoinAndSelect("permission.bucket", "bucket")
-        .where("permission.userId = :userId", { userId })
-        .getMany();
-  
-      // Extract bucket IDs and permission types in one pass
-      const directAccessBucketIds = new Set<string>();
-      const bucketPermissionMap = new Map<string, string>();
-      
-      userPermissions.forEach((perm) => {
-        if (perm.bucket) {
-          directAccessBucketIds.add(perm.bucket.id);
-          bucketPermissionMap.set(perm.bucket.id, perm.permissionType);
-        }
-      });
-  
-      // Check if user is an approver in any approver groups
-      const userApproverGroups = await approverRepository
-        .createQueryBuilder("approver")
-        .innerJoin("approver.users", "user", "user.id = :userId", { userId })
-        .getMany();
-  
-      const userApproverIds = userApproverGroups.map((group) => group.id);
-      const isApprover = userApproverIds.length > 0;
-  
-      // Step 2: Handle root view or specific folder view
-      let folders = [];
-      let currentLocation: { id?: string; name: string; parentId?: string } = { name: "Root" };
-  
-      if (bucketId === undefined) {
-        // At root level - fetch all accessible folders with parent info in one query
-        const accessibleFolders = await bucketRepository.find({
-          where: { id: In(Array.from(directAccessBucketIds)) },
-          relations: ["parent"],
-        });
-  
-        // Create a set of all accessible parent IDs in one pass
-        const accessibleParentIds = new Set<string>();
-        accessibleFolders.forEach((folder) => {
-          if (folder.parentId && directAccessBucketIds.has(folder.parentId)) {
-            accessibleParentIds.add(folder.parentId);
-          }
-        });
-  
-        // Filter to get only top-level folders
-        folders = accessibleFolders.filter((folder) => {
-          return folder.parentId === null || 
-                 (folder.parentId !== undefined && !directAccessBucketIds.has(folder.parentId));
-        });
-      } else {
-        // Inside a specific folder - get current folder and subfolders in one query
-        const currentBucket = await bucketRepository.findOne({
-          where: { id: bucketId },
-          relations: ["parent"],
-        });
-  
-        if (!currentBucket) {
-          return { currentLocation: { name: "Root" }, folders: [], files: [] };
-        }
-  
-        currentLocation = {
-          id: currentBucket.id,
-          name: currentBucket.name,
-          parentId: currentBucket.parentId,
-        };
-  
-        // Check if user has access to this bucket
-        if (directAccessBucketIds.has(bucketId)) {
-          // User has direct access, get all subfolders at once
-          folders = await bucketRepository.find({
-            where: { parentId: bucketId },
-          });
-        } else {
-          // No direct access
-          return { currentLocation, folders: [], files: [] };
-        }
+export const listBucketContentsService = async (
+  userId: string,
+  bucketId?: string
+): Promise<any> => {
+  return executeTransaction(async (queryRunner) => {
+    const repositories = {
+      bucket: queryRunner.manager.getRepository(Bucket),
+      item: queryRunner.manager.getRepository(MyItem),
+      permission: queryRunner.manager.getRepository(Permission),
+      approver: queryRunner.manager.getRepository(Approver),
+      approval: queryRunner.manager.getRepository(Approval),
+      version: queryRunner.manager.getRepository(ObjectVersion)
+    };
+
+    // Get user permissions and build maps
+    const userPermissions = await repositories.permission
+      .createQueryBuilder("permission")
+      .leftJoinAndSelect("permission.bucket", "bucket")
+      .where("permission.userId = :userId", { userId })
+      .getMany();
+
+    const directAccessBucketIds = new Set<string>();
+    const bucketPermissionMap = new Map<string, string>();
+    userPermissions.forEach(perm => {
+      if (perm.bucket) {
+        directAccessBucketIds.add(perm.bucket.id);
+        bucketPermissionMap.set(perm.bucket.id, perm.permissionType);
       }
-  
-      // Step 3: Optimize file retrieval if in a specific bucket
-      let files: any[] = [];
-      if (bucketId !== undefined) {
-        // Combine file permission queries into a single operation
-        const [permittedFilesPermissions, ownedFiles] = await Promise.all([
-          permissionRepository
-            .createQueryBuilder("permission")
-            .leftJoinAndSelect("permission.item", "item")
-            .where("permission.userId = :userId", { userId })
-            .andWhere("permission.itemId IS NOT NULL")
-            .andWhere("item.bucketId = :bucketId", { bucketId })
-            .getMany(),
-          
-          itemRepository.find({
-            where: { bucketId, userId },
-          })
-        ]);
-  
-        const permittedFileIds = permittedFilesPermissions
-          .map((perm) => perm.item?.id)
-          .filter((id) => id !== undefined) as string[];
+    });
+
+    // Get approver info
+    const userApproverGroups = await repositories.approver
+      .createQueryBuilder("approver")
+      .innerJoin("approver.users", "user", "user.id = :userId", { userId })
+      .getMany();
+
+    const userApproverIds = userApproverGroups.map(group => group.id);
+    const isApprover = userApproverIds.length > 0;
+
+    // Build approver map
+    const approverMap = new Map<string, string[]>();
+    if (isApprover) {
+      userApproverGroups.forEach(approver => {
+        const name = approver.name;
+        let id, prefix;
         
-        const ownedFileIds = ownedFiles.map((file) => file.id);
-  
-        // Combine all accessible file IDs and remove duplicates
-        const accessibleFileIds = [
-          ...new Set([...permittedFileIds, ...ownedFileIds]),
-        ];
-  
-        if (accessibleFileIds.length > 0) {
-          // Fetch all accessible files with owner and permissions in one query
-          const allAccessibleFiles = await itemRepository.find({
+        if (name.startsWith('bucket_')) {
+          prefix = 'bucket_';
+          id = name.substring(7);
+        } else if (name.startsWith('file_')) {
+          prefix = 'file_';
+          id = name.substring(5);
+        } else {
+          return;
+        }
+        
+        if (!approverMap.has(id)) {
+          approverMap.set(id, []);
+        }
+        approverMap.get(id)?.push(name);
+      });
+    }
+
+    // Handle locations and folders
+    let folders = [];
+    let currentLocation: { id?: string; name: string; parentId?: string | null } = { name: "Root" };
+
+    if (bucketId === undefined) {
+      // Root level - get all accessible folders
+      const accessibleFolders = await repositories.bucket.find({
+        where: { id: In(Array.from(directAccessBucketIds)) },
+        relations: ["parent"],
+      });
+
+      folders = accessibleFolders.filter(folder => 
+        folder.parentId === null || (folder.parentId !== undefined && !directAccessBucketIds.has(folder.parentId))
+      );
+    } else {
+      // Specific folder - get current folder and subfolders
+      const currentBucket = await repositories.bucket.findOne({
+        where: { id: bucketId },
+        relations: ["parent"],
+      });
+
+      if (!currentBucket) {
+        return { currentLocation: { name: "Root" }, folders: [], files: [] };
+      }
+
+      currentLocation = {
+        id: currentBucket.id,
+        name: currentBucket.name,
+        parentId: currentBucket.parentId,
+      };
+
+      if (directAccessBucketIds.has(bucketId)) {
+        folders = await repositories.bucket.find({ where: { parentId: bucketId } });
+      } else {
+        return { currentLocation, folders: [], files: [] };
+      }
+    }
+
+    // Handle files
+    let files: any[] = [];
+    if (bucketId !== undefined) {
+      // Get files user has access to
+      const [permittedFilesPermissions, ownedFiles] = await Promise.all([
+        repositories.permission
+          .createQueryBuilder("permission")
+          .leftJoinAndSelect("permission.item", "item")
+          .where("permission.userId = :userId", { userId })
+          .andWhere("permission.itemId IS NOT NULL")
+          .andWhere("item.bucketId = :bucketId", { bucketId })
+          .getMany(),
+        
+        repositories.item.find({ where: { bucketId, userId } })
+      ]);
+
+      const accessibleFileIds = [
+        ...new Set([
+          ...permittedFilesPermissions.map(perm => perm.item?.id).filter(Boolean),
+          ...ownedFiles.map(file => file.id)
+        ])
+      ];
+
+      if (accessibleFileIds.length > 0) {
+        // Get file details, versions and approvals in parallel
+        const allVersions = await repositories.version
+          .createQueryBuilder("version")
+          .leftJoinAndSelect("version.uploader", "uploader")
+          .where("version.objectId IN (:...fileIds)", { fileIds: accessibleFileIds })
+          .orderBy("version.created_at", "DESC")
+          .getMany();
+
+        const [allAccessibleFiles, pendingApprovals] = await Promise.all([
+          repositories.item.find({
             where: { id: In(accessibleFileIds) },
             relations: ['owner', 'permissions'],
-          });
-  
-          // Batch fetch all versions for these files in one query
-          const allVersions = await queryRunner.manager
-            .getRepository(ObjectVersion)
-            .createQueryBuilder("version")
-            .leftJoinAndSelect("version.uploader", "uploader")
-            .where("version.objectId IN (:...fileIds)", { fileIds: accessibleFileIds })
-            .orderBy("version.created_at", "DESC")
-            .getMany();
-  
-          // Group versions by file ID for faster access
-          const versionsByFileId: { [key: string]: ObjectVersion[] } = {};
-          allVersions.forEach(version => {
-            if (!versionsByFileId[version.objectId]) {
-              versionsByFileId[version.objectId] = [];
-            }
-            versionsByFileId[version.objectId].push(version);
-          });
-  
-          // Batch fetch all pending approvals that might be relevant
-          const pendingApprovals = isApprover ? await approvalRepository.find({
+          }),
+          
+          isApprover ? repositories.approval.find({
             where: [
               {
                 objectVersionId: In(allVersions.map(v => v.id)),
@@ -175,58 +168,47 @@ const permissionService = new PermissionService();
                 decision: "pending",
               },
             ],
-          }) : [];
-  
-          // Group approvals by version ID
-          const approvalsByVersionId: { [key: string]: Approval } = {};
-          pendingApprovals.forEach(approval => {
-            if (approval.objectVersionId !== undefined) {
-              approvalsByVersionId[approval.objectVersionId] = approval;
-            }
-          });
-  
-          // Process each file
-          for (const file of allAccessibleFiles) {
+          }) : []
+        ]);
+
+        // Index versions and approvals for quick access
+        const versionsByFileId = allVersions.reduce((acc: { [key: string]: ObjectVersion[] }, version) => {
+          if (!acc[version.objectId]) acc[version.objectId] = [];
+          acc[version.objectId].push(version);
+          return acc;
+        }, {});
+
+        const approvalsByVersionId = pendingApprovals.reduce<{ [key: string]: Approval }>((acc, approval) => {
+          if (approval.objectVersionId) acc[approval.objectVersionId] = approval;
+          return acc;
+        }, {});
+
+        // Process files
+        files = allAccessibleFiles
+          .map(file => {
             const fileVersions = versionsByFileId[file.id] || [];
             
-            // Filter versions based on user's role and access - now with fewer DB calls
-            const filteredVersions = fileVersions.map(version => {
-              if (version.status === "approved") {
-                return {
-                  ...version,
-                  uploader: version.uploader ? version.uploader.username : "Unknown User",
-                };
-              }
-  
-              if (version.userId === userId) {
-                return {
-                  ...version,
-                  uploader: version.uploader ? version.uploader.username : "Unknown User",
-                };
-              }
-  
-              if (isApprover && version.status !== "rejected") {
-                const pendingApproval = approvalsByVersionId[version.id];
-                if (pendingApproval) {
+            const filteredVersions = fileVersions
+              .map((version: any) => {
+                if (version.status === "approved" || 
+                    version.userId === userId ||
+                    (isApprover && version.status !== "rejected" && approvalsByVersionId[version.id])) {
                   return {
                     ...version,
                     uploader: version.uploader ? version.uploader.username : "Unknown User",
-                    requestingApproval: true,
+                    ...(approvalsByVersionId[version.id] ? { requestingApproval: true } : {})
                   };
                 }
-              }
-  
-              return null;
-            }).filter(v => v !== null);
-  
-            // Skip files with no accessible versions
-            if (filteredVersions.length === 0) continue;
-  
+                return null;
+              })
+              .filter(Boolean);
+
+            if (filteredVersions.length === 0) return null;
+
             const latestVersion = filteredVersions.find(it => it.isLatest) || null;
-            const latestVersionWithKey = latestVersion && { ...latestVersion, name: file.key };
-  
-            // Add file to response with accessible versions
-            files.push({
+            const fileApprovers = approverMap.get(file.id) || [];
+            const isOwner=file.userId===userId;
+            const result = {
               id: file.id,
               name: file.key,
               type: "file",
@@ -239,68 +221,77 @@ const permissionService = new PermissionService();
                 email: file.owner.email,
               },
               permissionType: file.permissions.find(
-                (perm) => perm.itemId === file.id && perm.userId === userId
+                perm => perm.itemId === file.id && perm.userId === userId
               )?.permissionType || null,
-              latestVersion: latestVersionWithKey,
+              latestVersion: latestVersion && { ...latestVersion, name: file.key },
               versions: filteredVersions,
-            });
-          }
-        }
+              ...(fileApprovers.length > 0 ? {
+                isApprover: true,
+                approverNames: fileApprovers
+              } : {}),
+              ...(isOwner?{
+                isOwner:isOwner
+              }:{})
+            };
+            
+            return result;
+          })
+          .filter(Boolean);
       }
-  
-      // Step 4: More efficiently get permissions for folders
-      // Fetch all folder IDs that need permission checks
-      const folderIds = folders.map(folder => folder.id);
-      
-      // Get any missing permissions in one batch query
-      const missingFolderIds = folderIds.filter(id => !bucketPermissionMap.has(id));
-      
-      // Only query if there are missing permissions
-      if (missingFolderIds.length > 0) {
-        const additionalPermissions = await permissionRepository.find({
-          where: {
-            bucketId: In(missingFolderIds),
-            userId: userId
-          }
-        });
-        
-        // Add these to our permission map
-        additionalPermissions.forEach(perm => {
-          if (perm.bucketId) {
-            bucketPermissionMap.set(perm.bucketId, perm.permissionType);
-          }
-        });
-      }
-      
-      // Format folders with permission types
-      const folderList = folders.map(folder => {
-        // Get permission type from map or determine ownership
-        let permissionType = bucketPermissionMap.get(folder.id) || null;
-        
-        // If not found and user is the owner, set to "owner"
-        if (!permissionType && folder.userId === userId) {
-          permissionType = "owner";
+    }
+
+    // Format folders with permissions
+    const folderIds = folders.map(folder => folder.id);
+    const missingFolderIds = folderIds.filter(id => !bucketPermissionMap.has(id));
+    
+    if (missingFolderIds.length > 0) {
+      const additionalPermissions = await repositories.permission.find({
+        where: {
+          bucketId: In(missingFolderIds),
+          userId: userId
         }
-        
-        return {
-          id: folder.id,
-          name: folder.name,
-          type: "folder",
-          parentId: folder.parentId,
-          modified: folder.updated_at,
-          permissionType: permissionType
-        };
       });
-  
+      
+      additionalPermissions.forEach(perm => {
+        if (perm.bucketId) {
+          bucketPermissionMap.set(perm.bucketId, perm.permissionType);
+        }
+      });
+    }
+    
+    const folderList = folders.map(folder => {
+      let permissionType = bucketPermissionMap.get(folder.id) || 
+                          (folder.userId === userId ? "owner" : null);
+      
+      const bucketApprovers = approverMap.get(folder.id) || [];
+      const isOwner=folder.userId===userId;
+      
+      
       return {
-        currentLocation,
-        folders: folderList,
-        files,
+        id: folder.id,
+        name: folder.name,
+        type: "folder",
+        parentId: folder.parentId,
+        modified: folder.updated_at,
+        permissionType,
+        ...(bucketApprovers.length > 0 ? {
+          isApprover: true,
+          approverNames: bucketApprovers
+        } : {}),
+        ...(isOwner?{
+          isOwner:isOwner
+        }:{})
       };
     });
-  };
 
-  export const listFilesByExtensionService = async (
+    return {
+      currentLocation,
+      folders: folderList,
+      files,
+    };
+  });
+};
+export const listFilesByExtensionService = async (
     userId: string,
     fileExtension?: string
   ): Promise<any> => {
@@ -318,6 +309,7 @@ const permissionService = new PermissionService();
         .where("permission.userId = :userId", { userId })
         .getMany();
   
+      const approverMap = new Map<string, string[]>();
       // Extract bucket IDs and permission types in one pass
       const directAccessBucketIds = new Set<string>();
       const bucketPermissionMap = new Map<string, string>();
@@ -351,6 +343,22 @@ const permissionService = new PermissionService();
           })
         };
       }
+
+      if (isApprover) {
+
+        for (const approver of userApproverGroups) {
+          const approverName = approver.name;
+
+        if (approverName.startsWith('file_')) {
+          const itemId = approverName.substring(5); // Remove 'file_' prefix
+          if (!approverMap.has(itemId)) {
+            approverMap.set(itemId, []);
+          }
+          approverMap.get(itemId)?.push(approverName);
+        }
+      }
+
+    }
   
       // Get files the user owns with the specified extension
       const ownedFiles = await itemRepository.find({
@@ -360,6 +368,7 @@ const permissionService = new PermissionService();
           ...fileExtensionCondition
         }
       });
+
   
       // Get files the user has permissions for with the specified extension
       const permittedFilesPermissions = await permissionRepository
@@ -475,14 +484,17 @@ const permissionService = new PermissionService();
   
             return null;
           }).filter(v => v !== null);
+
+
   
           // Skip files with no accessible versions
           if (filteredVersions.length === 0) continue;
   
           const latestVersion = filteredVersions.find(it => it.isLatest) || null;
           const latestVersionWithKey = latestVersion && { ...latestVersion, name: file.key };
-  
-          // Add file to response with accessible versions
+          const fileApprovers = approverMap.get(file.id) || [];
+          const isOwner=file.userId===userId;
+         
           files.push({
             id: file.id,
             name: file.key,
@@ -500,6 +512,14 @@ const permissionService = new PermissionService();
             )?.permissionType || null,
             latestVersion: latestVersionWithKey,
             versions: filteredVersions,
+            ...(fileApprovers.length > 0 ? {
+              isApprover: true,
+              approverNames: fileApprovers
+            } : {}),
+            ...(isOwner?{
+              isOwner:isOwner
+            }:{})
+            
           });
         }
       }
@@ -587,10 +607,15 @@ export const createBucketService = async (
 ): Promise<Bucket> => {
   return executeTransaction(async (queryRunner) => {
     const bucketRepository = queryRunner.manager.getRepository(Bucket);
-    const existingBucket = await bucketRepository.findOne({
-      where: { name: bucketName, userId },
-    });
+    const approvalRepository = queryRunner.manager.getRepository(Approval);
+    const approverRepository = queryRunner.manager.getRepository(Approver);
+    const whereCondition: any = { name: bucketName, userId };
 
+    // Include parentId only if it's provided (not `null` or `undefined`)
+    if (bucketParentId &&bucketParentId !== undefined) {
+      whereCondition.parentId = bucketParentId;
+    }
+    const existingBucket = await bucketRepository.findOne({ where: whereCondition });
     if (existingBucket) throw new Error("Bucket already exists");
 
     const bucket = new Bucket();
@@ -600,6 +625,21 @@ export const createBucketService = async (
 
     await bucketRepository.save(bucket);
     await permissionService.assignBucketPermission(userId, bucket.id);
+
+
+    if (bucket.requiresApproval && !bucket.defaultApproverId){
+      const ownerApprover = new Approver();
+        ownerApprover.name = `bucket_${bucket.id}`;
+        ownerApprover.isGroup = false;
+        ownerApprover.approvalType = 'standard';
+        ownerApprover.minApprovals = 1;
+        const savedApprover = await approverRepository.save(ownerApprover);
+        await queryRunner.manager.query(
+          `INSERT INTO approver_users (approverId, userId) VALUES (?, ?)`,
+          [savedApprover.id, userId]
+        );
+    }
+    
 
     return bucket;
   });
@@ -746,5 +786,145 @@ export const updateVersioningService = async (
       }
     }
     return await bucketRepository.save(bucket);
+  });
+};
+
+
+
+export const ApprovalItemList = async (
+  userId: string,
+): Promise<any> => {
+  return executeTransaction(async (queryRunner) => {
+    const itemRepository = queryRunner.manager.getRepository(MyItem);
+    const approverRepository = queryRunner.manager.getRepository(Approver);
+    const objectVersionRepository = queryRunner.manager.getRepository(ObjectVersion);
+    const permissionRepository = queryRunner.manager.getRepository(Permission);
+
+    // Step 1: Check if the user is an approver in any approver groups
+    const userApproverGroups = await approverRepository
+      .createQueryBuilder("approver")
+      .innerJoin("approver.users", "user", "user.id = :userId", { userId })
+      .getMany();
+
+    const userApproverIds = userApproverGroups.map((group) => group.id);
+    
+    // If user is not an approver, return empty list
+    if (userApproverIds.length === 0) {
+      return {  folders:[],
+        files:[]};
+    }
+
+    // Step 2: First find objects that have any version requiring approval
+    const objectsNeedingApproval = await objectVersionRepository
+      .createQueryBuilder("version")
+      .select("version.objectId")
+      .distinct(true)
+      .where("version.approverId IN (:...userApproverIds)", { userApproverIds })
+      .andWhere("version.status = :status", { status: "pending" })
+      .getRawMany();
+
+    const objectIds = objectsNeedingApproval.map(obj => obj.version_objectId);
+
+    // If no objects need approval, return empty list
+    if (objectIds.length === 0) {
+      return {  folders:[],
+        files:[]};
+    }
+
+    // Step 3: Fetch ALL versions for these objects, not just the ones requiring approval
+    const allVersions = await objectVersionRepository
+      .createQueryBuilder("version")
+      .leftJoinAndSelect("version.object", "object")
+      .leftJoinAndSelect("version.uploader", "uploader")
+      .leftJoinAndSelect("object.owner", "owner")
+      .where("version.objectId IN (:...objectIds)", { objectIds })
+      .orderBy("version.created_at", "DESC")
+      .getMany();
+
+    // Also fetch the specific versions that need approval for flagging
+    const pendingVersionIds = await objectVersionRepository
+      .createQueryBuilder("version")
+      .select("version.id")
+      .where("version.approverId IN (:...userApproverIds)", { userApproverIds })
+      .andWhere("version.status = :status", { status: "pending" })
+      .andWhere("version.objectId IN (:...objectIds)", { objectIds })
+      .getRawMany();
+
+    const pendingVersionIdSet = new Set(pendingVersionIds.map(v => v.version_id));
+
+    // Step 4: Fetch all permissions for these files for the current user
+    const userPermissions = await permissionRepository.find({
+      where: {
+        itemId: In(objectIds),
+        userId: userId
+      }
+    });
+
+    // Create a map of item ID to permission type for quick lookup
+    const permissionMap = new Map<string, string>();
+    userPermissions.forEach(perm => {
+      if (perm.itemId) {
+        permissionMap.set(perm.itemId, perm.permissionType);
+      }
+    });
+
+    // Step 5: Group versions by object ID
+    const versionsByObjectId = allVersions.reduce((acc, version) => {
+      if (!acc[version.objectId]) {
+        acc[version.objectId] = [];
+      }
+      acc[version.objectId].push(version);
+      return acc;
+    }, {} as Record<string, ObjectVersion[]>);
+
+    // Step 6: Create file objects with all their versions
+    const files = Object.keys(versionsByObjectId).map(objectId => {
+      const versions = versionsByObjectId[objectId];
+      const firstVersion = versions[0]; // Reference for object info
+      
+      // Map versions with needed properties and flag ones requiring approval
+      const mappedVersions = versions.map(v => ({
+        id: v.id,
+        versionId: v.id,
+        size: v.size,
+        etag: v.etag,
+        isLatest: v.isLatest,
+        status: v.status,
+        created_at: v.created_at,
+        updated_at: v.updated_at,
+        uploader: v.uploader ? v.uploader.username : "Unknown User",
+        // Flag if this specific version needs approval
+        requestingApproval: pendingVersionIdSet.has(v.id)
+      }));
+
+      // Find latest version
+      const latestVersion = mappedVersions.find(v => v.isLatest) || mappedVersions[0];
+      
+      return {
+        id: objectId,
+        name: firstVersion.object.key,
+        type: "file",
+        bucketId: firstVersion.object.bucketId,
+        userId: firstVersion.object.userId,
+        created_at: firstVersion.object.created_at,
+        modified: firstVersion.object.updated_at,
+        owner: {
+          username: firstVersion.object.owner.username,
+          email: firstVersion.object.owner.email,
+        },
+        // Include the user's permission type for this file
+        permissionType: permissionMap.get(objectId) || null,
+        // Include all versions for the item
+        versions: mappedVersions,
+        latestVersion: latestVersion ? { ...latestVersion, name: firstVersion.object.key } : null,
+        // Flag that this file has at least one version requiring approval
+        hasVersionsNeedingApproval: true
+      };
+    });
+
+    return { 
+      folders:[],
+      files:files
+     };
   });
 };

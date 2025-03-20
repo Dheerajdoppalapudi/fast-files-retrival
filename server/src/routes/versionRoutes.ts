@@ -1,5 +1,5 @@
 import express from 'express';
-import { approveVersion, rejectVersion, listVersions,downloadVersion } from '../controllers/versionController';
+import { approveVersion, rejectVersion,downloadVersion, ExtractText, ComparePDF } from '../controllers/versionController';
 import { AuthRequest, authenticateToken, authorizeRole } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -14,15 +14,22 @@ router.put(
     authenticateToken, 
     rejectVersion
   );
-  router.get(
-    '/:bucketName/objects/:key/versions', 
-    authenticateToken, 
-    listVersions
-  );
 
   router.get(
     '/download/:versionId', 
     authenticateToken, 
     downloadVersion
+  );
+
+  router.get(
+    '/extractText/:versionId', 
+    authenticateToken, 
+    ExtractText
+  );
+
+  router.get(
+    '/versionA/:versionIdA/versionB/:versionIdB', 
+    authenticateToken, 
+    ComparePDF
   );
 export default router;

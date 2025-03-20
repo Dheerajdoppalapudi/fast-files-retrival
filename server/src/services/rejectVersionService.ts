@@ -8,7 +8,7 @@ import fs from 'fs';
 export const rejectVersionService = async (versionId: string) => {
     const versionRepository = AppDataSource.getRepository(ObjectVersion);
 
-    const version = await versionRepository.findOne({ where: { versionId } });
+    const version = await versionRepository.findOne({ where: { id:versionId } });
     if (!version) throw new Error('Version not found');
 
     // Get the item associated with the version
@@ -20,7 +20,7 @@ export const rejectVersionService = async (versionId: string) => {
     if (!bucket) throw new Error('Bucket not found');
 
     // Delete the file
-    const finalFilePath = getFinalFilePath(bucket.name, myItem.key, version.versionId);
+    const finalFilePath = getFinalFilePath(bucket.name, myItem.key, version.id);
     if (fs.existsSync(finalFilePath)) {
         fs.unlinkSync(finalFilePath);
     }
