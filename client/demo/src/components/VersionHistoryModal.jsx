@@ -1,28 +1,34 @@
 import React from "react";
-import { Modal, Timeline, Button, Space, Typography, Tag, Tooltip, theme } from "antd";
+import { Modal, Timeline, Button, Space, Typography, Tag, Tooltip, theme, Spin, Skeleton, Row, Col } from "antd";
 import {
   EyeOutlined,
   DownloadOutlined,
   RollbackOutlined,
   CloseOutlined,
   CheckOutlined,
+  DeleteOutlined,
 } from "@ant-design/icons";
 import api from "../utils/api";
 import { blobToText, extractText, formatFileSize } from "../utils/fileUtils";
 import DiffMatchPatch from "diff-match-patch";
+import { useMediaQuery } from 'react-responsive';
 
-const { Text } = Typography;
+const { Text, Title } = Typography;
 
 // FileViewer Component for displaying a single file
-const FileViewer = ({ content }) => {
+const FileViewer = ({ content, loading }) => {
   const { token } = theme.useToken();
+  
+  if (loading) {
+    return <Skeleton active paragraph={{ rows: 10 }} />;
+  }
   
   return (
     <div
       style={{
         background: token.colorBgContainer,
         padding: "15px",
-        borderRadius: "5px",
+        borderRadius: "8px",
         color: token.colorTextBase,
         fontSize: "16px",
         lineHeight: "1.5",
@@ -30,6 +36,7 @@ const FileViewer = ({ content }) => {
         width: "100%",
         height: "100%",
         overflow: "auto",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
       }}
     >
       <pre style={{ whiteSpace: "pre-wrap" }}>{content}</pre>
@@ -38,7 +45,7 @@ const FileViewer = ({ content }) => {
 };
 
 // FileComparison Component
-const FileComparison = ({ oldContent, newContent }) => {
+const FileComparison = ({ oldContent, newContent, loading }) => {
   const { token } = theme.useToken();
   const [diffResult, setDiffResult] = React.useState("");
 
@@ -51,6 +58,10 @@ const FileComparison = ({ oldContent, newContent }) => {
     }
   }, [oldContent, newContent]);
 
+  if (loading) {
+    return <Skeleton active paragraph={{ rows: 10 }} />;
+  }
+
   return (
     <div
       style={{
@@ -59,7 +70,7 @@ const FileComparison = ({ oldContent, newContent }) => {
         borderRadius: "8px",
         color: token.colorTextBase,
         width: "100%",
-        paddingTop: 0,
+        boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
       }}
     >
       <div
@@ -79,13 +90,15 @@ const FileComparison = ({ oldContent, newContent }) => {
 // VersionHistoryModal Component
 const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
   const { token } = theme.useToken(); // Using theme tokens for dynamic styling
+  const isMobile = useMediaQuery({ maxWidth: 768 });
   
-
   const [baseVersion, setBaseVersion] = React.useState(null);
   const [targetVersion, setTargetVersion] = React.useState(null);
   const [baseContent, setBaseContent] = React.useState("");
   const [targetContent, setTargetContent] = React.useState("");
   const [comparing, setComparing] = React.useState(false);
+  const [baseLoading, setBaseLoading] = React.useState(false);
+  const [targetLoading, setTargetLoading] = React.useState(false);
 
   // Use full screen when any panel is active
   const isFullScreen = React.useMemo(() => baseVersion !== null || targetVersion !== null, [baseVersion, targetVersion]);
@@ -97,36 +110,39 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
   }, [isFullScreen]);
 
   const timelineWidth = React.useMemo(() => {
-    if (baseVersion && targetVersion) return "20%";
-    if (baseVersion || targetVersion) return "25%";
+    if (baseVersion && targetVersion) return isMobile ? "30%" : "20%";
+    if (baseVersion || targetVersion) return isMobile ? "30%" : "25%";
     return "100%";
-  }, [baseVersion, targetVersion]);
+  }, [baseVersion, targetVersion, isMobile]);
 
   const baseWidth = React.useMemo(() => {
-    if (baseVersion && targetVersion) return "40%";
-    if (baseVersion) return "75%";
+    if (baseVersion && targetVersion) return isMobile ? "35%" : "40%";
+    if (baseVersion) return isMobile ? "70%" : "75%";
     return "0%";
-  }, [baseVersion, targetVersion]);
+  }, [baseVersion, targetVersion, isMobile]);
 
   const targetWidth = React.useMemo(() => {
-    if (baseVersion && targetVersion) return "40%";
-    if (targetVersion && !baseVersion) return "75%";
+    if (baseVersion && targetVersion) return isMobile ? "35%" : "40%";
+    if (targetVersion && !baseVersion) return isMobile ? "70%" : "75%";
     return "0%";
-  }, [targetVersion, baseVersion]);
+  }, [targetVersion, baseVersion, isMobile]);
 
   // Fetch file content when base or target version changes
   React.useEffect(() => {
     const fetchBaseContent = async () => {
       if (baseVersion) {
+        setBaseLoading(true);
         try {
           const data = await fileview(baseVersion);
           if (data?.blob) {
-            const text = await blobToText(data.blob, file?.name,baseVersion.id);
+            const text = await blobToText(data.blob, file?.name, baseVersion.id);
             setBaseContent(text);
           }
         } catch (error) {
           console.error("Error fetching base content:", error);
           setBaseContent("Error loading file");
+        } finally {
+          setBaseLoading(false);
         }
       } else {
         setBaseContent("");
@@ -139,16 +155,18 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
   React.useEffect(() => {
     const fetchTargetContent = async () => {
       if (targetVersion) {
-        console.log(targetVersion)
+        setTargetLoading(true);
         try {
           const data = await fileview(targetVersion);
           if (data?.blob) {
-            const text = await blobToText(data.blob, file?.name,targetVersion.id);
+            const text = await blobToText(data.blob, file?.name, targetVersion.id);
             setTargetContent(text);
           }
         } catch (error) {
           console.error("Error fetching target content:", error);
           setTargetContent("Error loading file");
+        } finally {
+          setTargetLoading(false);
         }
       } else {
         setTargetContent("");
@@ -179,21 +197,28 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
   };
 
   const versionApproved = async (version) => {
-    console.log(version)
-    await api.Versions().approveVersion({
-      versionID: version.id,
-    });
-    if (onrefersh) {
-      onrefersh();
+    try {
+      await api.Versions().approveVersion({
+        versionID: version.id,
+      });
+      if (onrefersh) {
+        onrefersh();
+      }
+    } catch (error) {
+      console.error("Error approving version:", error);
     }
   };
 
   const rejectApproved = async (version) => {
-    await api.Versions().rejectVersion({
-      versionID: version.id,
-    });
-    if (onrefersh) {
-      onrefersh();
+    try {
+      await api.Versions().rejectVersion({
+        versionID: version.id,
+      });
+      if (onrefersh) {
+        onrefersh();
+      }
+    } catch (error) {
+      console.error("Error rejecting version:", error);
     }
   };
 
@@ -227,6 +252,39 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
     }
   };
 
+  const deleteVersion = async (version) => {
+    try {
+      await api.Items().removeItem({
+        itemID: file.id,
+        versionID: version.id
+      });
+      if (onrefersh) {
+        onrefersh();
+      }
+    } catch (error) {
+      console.error("Delete failed:", error);
+    }
+  };
+
+  const renderActionButton = (icon, text, onClick, type = "default", disabled = false,danger=false) => {
+
+    const smallicon=!isMobile && !baseVersion && !targetVersion ;
+    return (
+      <Tooltip title={!smallicon?text:""} placement="top">
+      <Button
+        icon={icon}
+        type={type}
+        onClick={onClick}
+        disabled={disabled}
+        style={{ minWidth: isMobile ? "40px" : "auto" }}
+        danger={danger}
+      >
+        {smallicon && text}
+      </Button>
+    </Tooltip>
+    );
+  };
+
   const timeline = (
     <div
       style={{
@@ -235,23 +293,35 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
         overflowY: "auto",
         height: isFullScreen ? "calc(100vh - 57px)" : "auto",
         borderRight: isFullScreen ? `1px solid ${token.colorBorder}` : "none",
+        backgroundColor: token.colorBgElevated,
       }}
     >
-      <Timeline>
+      <Timeline
+        style={{
+          padding: "16px",
+        }}
+      >
         {file?.versions?.map((version, index) => {
           const status = version.status === "approved";
+          const isActive = baseVersion === version || targetVersion === version;
+          const versionNumber = file?.versions.length - index;
 
           return (
-            <Timeline.Item key={index} style={{paddingTop:7,paddingBottom:7}} color={!status ? "red" : "green"}>
+            <Timeline.Item 
+              key={index} 
+              style={{paddingTop: 7, paddingBottom: 7}} 
+              color={!status ? "red" : "green"}
+            >
               <div
                 style={{
-                  backgroundColor: token.colorBgContainer,
+                  backgroundColor: isActive ? token.colorPrimaryBg : token.colorBgContainer,
                   padding: "16px",
                   borderRadius: "8px",
-                  border: `1px solid ${token.colorBorder}`,
+                  border: `1px solid ${isActive ? token.colorPrimary : token.colorBorder}`,
                   marginBottom: "8px",
                   transition: "all 0.3s ease",
                   cursor: "pointer",
+                  boxShadow: isActive ? `0 2px 8px ${token.colorPrimaryBgHover}` : "0 1px 3px rgba(0,0,0,0.05)",
                 }}
               >
                 {/* Version Header */}
@@ -263,41 +333,58 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
                     marginBottom: "12px",
                   }}
                 >
-                  <Text strong style={{ color: token.colorTextBase, fontSize: "16px" }}>
-                    {`Version ${file?.versions.length-index} ${
-                      !status && version.hasOwnProperty("restore")
-                        ? `<--- Version ${version.restore.id} `
-                        : ""
-                    }`}
+                  <Text strong style={{ 
+                    color: token.colorTextBase, 
+                    fontSize: isMobile ? "14px" : "16px",
+                    display: "flex",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                  }}>
+                    {`Version ${versionNumber} `}
                     {status ? (
-                      <Tag color="green">{version.status}</Tag>
+                      <Tag color="green" style={{ marginLeft: 4 }}>{version.status}</Tag>
                     ) : (
-                      <Tag color="red">{version.status}</Tag>
+                      <Tag color="red" style={{ marginLeft: 4 }}>{version.status}</Tag>
                     )}
                   </Text>
-                  <Text style={{ color: token.colorTextSecondary, fontSize: "14px" }}>
-                    {new Date(version.created_at).toLocaleDateString("en-US", {
-                      day: "2-digit",
-                      month: "long",
-                      year: "numeric",
-                    })}
-                  </Text>
+                  {!isMobile && (
+                    <Text style={{ color: token.colorTextSecondary, fontSize: "14px" }}>
+                      {new Date(version.created_at).toLocaleDateString("en-US", {
+                        day: "2-digit",
+                        month: "long",
+                        year: "numeric",
+                      })}
+                    </Text>
+                  )}
                 </div>
 
                 {/* Version Details */}
                 <div style={{ marginBottom: "12px" }}>
-                  <Text style={{ color: token.colorTextSecondary, fontSize: "14px" }}>
+                  <Text style={{ 
+                    color: token.colorTextSecondary, 
+                    fontSize: isMobile ? "12px" : "14px",
+                    display: "block",
+                  }}>
                     Size: {formatFileSize(version.size)} • Modified by: {version.uploader}
                   </Text>
+                  {isMobile && (
+                    <Text style={{ color: token.colorTextSecondary, fontSize: "12px" }}>
+                      {new Date(version.created_at).toLocaleDateString("en-US", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </Text>
+                  )}
                 </div>
 
                 {/* Version Notes - with text truncation */}
                 <div style={{ marginBottom: "12px" }}>
-                  <Tooltip title={version.notes}>
+                  <Tooltip title={version.notes || "No notes provided"}>
                     <Text
                       style={{
                         color: token.colorTextBase,
-                        fontSize: "14px",
+                        fontSize: isMobile ? "12px" : "14px",
                         display: "block",
                         whiteSpace: "nowrap",
                         overflow: "hidden",
@@ -305,105 +392,90 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
                         maxWidth: "100%",
                       }}
                     >
-                      {version.notes}
+                      {version.notes || "No notes provided"}
                     </Text>
                   </Tooltip>
                 </div>
 
                 {/* Action Buttons */}
-               <div  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: "12px",
+                <div style={{ 
+                  display: "flex", 
+                  justifyContent: "space-between", 
+                  flexWrap: "wrap", 
+                  gap: "8px" 
+                }}>
+                  <div style={{ 
+                    display: "flex", 
+                    gap: "8px", 
+                    flexWrap: "wrap",
+                    flex: file.isOwner ? "1 1 auto" : "1 1 100%"
                   }}>
-                <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <Button
-                    icon={<EyeOutlined />}
-                    style={{
-                      backgroundColor: token.colorBgContainer,
-                      borderColor: token.colorBorder,
-                      color: token.colorTextBase,
-                    }}
-                    onClick={() => handleViewClick(version)}
-                  >
-                    View
-                  </Button>
-                  <Button
-                    icon={<DownloadOutlined />}
-                    style={{
-                      backgroundColor: token.colorBgContainer,
-                      borderColor: token.colorBorder,
-                      color: token.colorTextBase,
-                    }}
-                    onClick={() => {
-                      downloadFile(version);
-                    }}
-                  >
-                    Download
-                  </Button>
-
-                  {!version.hasOwnProperty("requestingApproval") && !version.requestingApproval && (
-                    <Button
-                      icon={status ? <RollbackOutlined /> : <CloseOutlined />}
-                      style={{
-                        backgroundColor: token.colorBgContainer,
-                        borderColor: token.colorBorder,
-                        color: status && version.hasOwnProperty("restore") && !version?.restore
-                          ? "dimgray"
-                          : "red",
-                      }}
-                    >
-                      {status ? "Restore" : "Revert"}
-                    </Button>
-                  )}
-
-                  {version.requestingApproval && (
-                    <>
-                      <Button
-                        icon={<CheckOutlined />}
-                        style={{
-                          backgroundColor: token.colorBgContainer,
-                          borderColor: token.colorBorder,
-                          color: token.colorTextBase,
-                        }}
-                        onClick={() => {
-                          versionApproved(version);
-                        }}
-                      >
-                        Approve
-                      </Button>
-
-                      <Button
-                        icon={<CloseOutlined />}
-                        style={{
-                          backgroundColor: token.colorBgContainer,
-                          borderColor: token.colorBorder,
-                          color: token.colorTextBase,
-                        }}
-                        onClick={() => {
-                          rejectApproved(version);
-                        }}
-                      >
-                        Reject
-                      </Button>
-                      
-                      
-                      
-                    </>
-                  )}
+                    {renderActionButton(
+                      <EyeOutlined />, 
+                      "View", 
+                      () => handleViewClick(version),
+                      isActive ? "primary" : "default"
+                    )}
+                    
+                    {renderActionButton(
+                      <DownloadOutlined />, 
+                      "Download", 
+                      () => downloadFile(version)
+                    )}
+                    
+                    {!version.hasOwnProperty("requestingApproval") && !version.requestingApproval && (
+                      renderActionButton(
+                        status ? <RollbackOutlined /> : <CloseOutlined />,
+                        status ? "Restore" : "Revert",
+                        () => {},
+                        status ? "default" : "default",
+                        status && version.hasOwnProperty("restore") && !version?.restore
+                      )
+                    )}
+                    
+                    {version.requestingApproval && (
+                      <>
+                        {renderActionButton(
+                          <CheckOutlined />, 
+                          "Approve", 
+                          () => versionApproved(version),
+                          "primary"
+                        )}
+                        
+                        {renderActionButton(
+                          <CloseOutlined />, 
+                          "Reject", 
+                          () => rejectApproved(version),
+                          "default"
+                        )}
+                      </>
+                    )}
+                  </div>
                   
-                 
-                </div>
-                {file.isOwner && <Button danger  onClick={async ()=>{
+                  {file.isOwner && (
+                    <div style={{ 
+                      display: "flex", 
+                      justifyContent: "flex-end", 
+                      flex: "0 0 auto" 
+                    }}>
+                      {renderActionButton(
+                          <DeleteOutlined />, 
+                          "Delete", 
+                          () => deleteVersion(version),
+                           "default",
+                           false,
+                           true
 
-                  await api.Items().removeItem({
-                    itemID:file.id,
-                    versionID:version.id
-                  })
 
-                }}>Delete</Button>}
-                
+
+                          
+                         
+                        )}
+
+
+                      
+                    </div>
+                  )}
                 </div>
               </div>
             </Timeline.Item>
@@ -433,10 +505,12 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
           alignItems: "center",
           padding: "12px 16px",
           borderBottom: `1px solid ${token.colorBorder}`,
+          backgroundColor: token.colorBgElevated,
         }}
       >
-        <Text strong style={{ color: token.colorTextBase, fontSize: "16px" }}>
+        <Text strong style={{ color: token.colorTextBase, fontSize: isMobile ? "14px" : "16px" }}>
           {comparing ? "Base Version" : "Viewing"}: Version {baseVersion.id}
+          {baseLoading && <Spin size="small" style={{ marginLeft: "10px" }} />}
         </Text>
         <Button
           icon={<CloseOutlined />}
@@ -456,7 +530,7 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
           overflow: "auto",
         }}
       >
-        <FileViewer content={baseContent} />
+        <FileViewer content={baseContent} loading={baseLoading} />
       </div>
     </div>
   );
@@ -482,11 +556,12 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
           alignItems: "center",
           padding: "12px 16px",
           borderBottom: `1px solid ${token.colorBorder}`,
-          backgroundColor: token.colorBgContainer,
+          backgroundColor: token.colorBgElevated,
         }}
       >
-        <Text strong style={{ color: token.colorTextBase, fontSize: "16px" }}>
+        <Text strong style={{ color: token.colorTextBase, fontSize: isMobile ? "14px" : "16px" }}>
           Target Version: Version {targetVersion.id}
+          {targetLoading && <Spin size="small" style={{ marginLeft: "10px" }} />}
         </Text>
         <Button
           icon={<CloseOutlined />}
@@ -505,9 +580,13 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
         }}
       >
         {comparing ? (
-          <FileComparison oldContent={baseContent} newContent={targetContent} />
+          <FileComparison 
+            oldContent={baseContent} 
+            newContent={targetContent} 
+            loading={baseLoading || targetLoading} 
+          />
         ) : (
-          <FileViewer content={targetContent} />
+          <FileViewer content={targetContent} loading={targetLoading} />
         )}
       </div>
     </div>
@@ -515,8 +594,14 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
 
   return (
     <Modal
-      title={`Version History - ${file?.name}`}
-      visible={visible}
+      title={
+        <div style={{ display: "flex", alignItems: "center" }}>
+          <Title level={4} style={{ margin: 0, fontSize: isMobile ? "16px" : "20px" }}>
+            Version History - {file?.name}
+          </Title>
+        </div>
+      }
+      open={visible}
       onCancel={() => {
         onClose();
         setBaseVersion(null);

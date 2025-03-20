@@ -508,7 +508,7 @@ class ItemService{
    
 
 
-    async uploadFileWithProgress({file, currentBucketID=null, onProgress = () => {}}) {
+    async uploadFileWithProgress({notes,file, currentBucketID=null, onProgress = () => {}}) {
         return new Promise((resolve, reject) => {
             if (!file || !file.name) {
                 return reject({ error: "Invalid file", message: "File is required" });
@@ -519,6 +519,9 @@ class ItemService{
     
             const formData = new FormData();
             formData.append("file", file);
+            if (notes) {
+                formData.append("notes", notes); // Append notes as additional data
+            }
     
             const xhr = new XMLHttpRequest();
     

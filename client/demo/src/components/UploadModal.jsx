@@ -1,10 +1,11 @@
-import React from 'react';
-import { Modal, Upload, Button, Progress, Typography, theme } from 'antd';
+import React, { useState } from 'react';
+import { Modal, Upload, Button, Progress, Typography, Input, theme } from 'antd';
 import { InboxOutlined, UploadOutlined } from '@ant-design/icons';
-const  { useToken }=theme
 
+const { useToken } = theme;
 const { Dragger } = Upload;
 const { Text } = Typography;
+const { TextArea } = Input;
 
 const UploadModal = ({ 
   visible, 
@@ -17,22 +18,20 @@ const UploadModal = ({
   currentBucketID,
   breadcrumbPath
 }) => {
-
-
   // Get the current theme token
   const { token } = useToken();
+  
+  // State for the note input
+  const [note, setNote] = useState('');
 
   // Generate current location text for the modal
   const getLocationText = () => {
     if (!currentBucketID) {
       return "Root directory";
     }
-
     if (breadcrumbPath && breadcrumbPath.length > 0) {
-      // Format the breadcrumb path for display
       return breadcrumbPath.map(item => item.name).join(' / ');
     }
-
     return currentBucketID;
   };
 
@@ -42,13 +41,8 @@ const UploadModal = ({
     multiple: true,
     fileList,
     onChange: onFileListChange,
-    beforeUpload: (file) => {
-      // Just return false to prevent auto upload
-      return false;
-    },
-    onDrop: (e) => {
-      console.log('Dropped files', e.dataTransfer.files);
-    },
+    beforeUpload: (file) => false, // Prevent auto-upload
+    onDrop: (e) => console.log('Dropped files', e.dataTransfer.files),
     disabled: uploading,
   };
 
@@ -66,7 +60,10 @@ const UploadModal = ({
         <Button
           key="upload"
           type="primary"
-          onClick={() => onUpload(currentBucketID)}
+          onClick={() => {
+            onUpload(currentBucketID, note);
+            setNote("")
+          }}
           loading={uploading}
           icon={<UploadOutlined />}
           disabled={fileList.length === 0}
@@ -136,6 +133,18 @@ const UploadModal = ({
           </Text>
         </div>
       )}
+
+      {/* Note Input */}
+      <div style={{ marginTop: '16px' }}>
+        <Text style={{ color: token.colorText }}>Add a Note (Optional):</Text>
+        <TextArea
+          rows={3}
+          placeholder="Enter a note for this upload..."
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          style={{ marginTop: '8px', color: token.colorText, backgroundColor: token.colorBgContainer, borderColor: token.colorBorder }}
+        />
+      </div>
     </Modal>
   );
 };

@@ -32,6 +32,7 @@ export const uploadObject = async (req: AuthRequest, res: Response) => {
   try {
     const { bucketId, key } = req.params;
     const file = req.file;
+    const notes=req.body.notes;
     const userId = req.user?.id;
 
     if (!file) {
@@ -39,7 +40,7 @@ export const uploadObject = async (req: AuthRequest, res: Response) => {
       return;
     }
 
-    const result = await uploadObjectService(bucketId, key, file, userId);
+    const result = await uploadObjectService(bucketId, key, file, userId,notes);
     res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });

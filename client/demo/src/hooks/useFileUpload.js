@@ -36,8 +36,10 @@ const useFileUpload = (onUploadComplete) => {
   };
   
  
-  const uploadFileWithProgress = async ({ file, currentBucketID = null, onProgress = () => {} }) => {
+  const uploadFileWithProgress = async ({ notes,file, currentBucketID = null, onProgress = () => {} }) => {
     return await api.Items().uploadFileWithProgress({
+      
+        notes:notes,
         file:file,
         currentBucketID:currentBucketID,
         onProgress:onProgress
@@ -45,7 +47,7 @@ const useFileUpload = (onUploadComplete) => {
   };
   
 
-  const uploadFiles = async (currentBucketID = null) => {
+  const uploadFiles = async (currentBucketID = null,notes="") => {
     if (!fileList.length) {
       message.warning('Please select at least one file to upload');
       return;
@@ -66,6 +68,7 @@ const useFileUpload = (onUploadComplete) => {
         try {
           // Upload individual file with progress tracking
           const result = await uploadFileWithProgress({
+            notes:notes,
             file,
             currentBucketID: currentBucketID,
             onProgress: (percent) => {
@@ -107,7 +110,7 @@ const useFileUpload = (onUploadComplete) => {
    * @param {Object} event - Drop event
    * @param {String|null} bucketName - Target bucket name
    */
-  const handleFileDrop = async (event, bucketName = null) => {
+  const handleFileDrop = async (event, bucketName = null,notes="") => {
     event.preventDefault();
     
     
@@ -129,6 +132,7 @@ const useFileUpload = (onUploadComplete) => {
       for (const file of droppedFiles) {
         try {
           await uploadFileWithProgress({
+            notes:notes,
             file,
             bucketName,
             onProgress: (percent) => {

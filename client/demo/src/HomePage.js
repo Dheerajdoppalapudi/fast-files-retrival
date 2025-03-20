@@ -148,7 +148,7 @@ const HomePage = () => {
             type="primary"
             icon={<UploadOutlined />}
             style={{
-              marginRight: "10px",
+             
               height: "38px",
               backgroundColor: token.colorPrimary,
               borderColor: token.colorPrimary,

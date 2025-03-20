@@ -74,7 +74,8 @@ export const uploadObjectService = async (
   key: string,
   file: Express.Multer.File,
   userId: string,
-  parentId?: string
+  notes?:string,
+  parentId?: string,
 ): Promise<{ key: string; versionId: string; etag: string; status: string }> => {
   return executeTransaction(async (queryRunner) => {
     const bucketRepository = queryRunner.manager.getRepository(Bucket);
@@ -176,6 +177,7 @@ export const uploadObjectService = async (
     newVersion.size = file.size;
     newVersion.etag = etag;
     newVersion.deleteMarker = false;
+    newVersion.notes=notes
     
     // Check if approval is required
     const requiresApproval = myItem.requiresApproval || bucket.requiresApproval;

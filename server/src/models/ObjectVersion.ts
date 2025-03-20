@@ -5,7 +5,6 @@ import { Approver } from './Approver';
 import { User } from './userModel';
 import { BaseEntity } from './BaseEntity';
 
-
 @Entity({ name: 'object_versions' })
 @Index(['objectId', 'isLatest'])
 export class ObjectVersion extends BaseEntity {
@@ -50,4 +49,7 @@ export class ObjectVersion extends BaseEntity {
 
   @OneToMany(() => Approval, (approval) => approval.objectVersion)
   approvals!: Approval[];
+
+  @Column({ type: 'varchar', length: 1000, nullable: true }) 
+  notes?: string;
 }
