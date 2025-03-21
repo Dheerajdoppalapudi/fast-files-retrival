@@ -35,8 +35,32 @@ const FileViewer = ({ content, loading }) => {
         wordWrap: "break-word",
         width: "100%",
         height: "100%",
-        overflow: "auto",
         boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        overflowY: "auto",
+        overflowX: "hidden",
+        
+        // Hide scrollbar by default
+        scrollbarWidth: "none", // Firefox
+        msOverflowStyle: "none", // IE and Edge
+        "&::-webkit-scrollbar": {
+          width: "6px", // Thin scrollbar
+          height: "6px" // Optional for horizontal scrollbar
+        },
+        "&::-webkit-scrollbar-thumb": {
+          backgroundColor: token.colorBorder, // Customize thumb color
+          borderRadius: "10px"
+        },
+        "&::-webkit-scrollbar-track": {
+          backgroundColor: "transparent" // Make track invisible
+        },
+      
+        // Show scrollbar when hovering
+        ":hover": {
+          overflowY: "scroll", // Enable scrollbar on hover
+          "&::-webkit-scrollbar": {
+            opacity: 1,
+          }
+        }
       }}
     >
       <pre style={{ whiteSpace: "pre-wrap" }}>{content}</pre>
@@ -70,17 +94,45 @@ const FileComparison = ({ oldContent, newContent, loading }) => {
         borderRadius: "8px",
         color: token.colorTextBase,
         width: "100%",
+        height: "100%",
         boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+        overflowY: "auto",
+        overflowX: "hidden",
+        
+        // Hide scrollbar by default
+        scrollbarWidth: "none", // Firefox
+        msOverflowStyle: "none", // IE and Edge
+        "&::-webkit-scrollbar": {
+          width: "6px", // Thin scrollbar
+          height: "6px" // Optional for horizontal scrollbar
+        },
+        "&::-webkit-scrollbar-thumb": {
+          backgroundColor: token.colorBorder, // Customize thumb color
+          borderRadius: "10px"
+        },
+        "&::-webkit-scrollbar-track": {
+          backgroundColor: "transparent" // Make track invisible
+        },
+      
+        // Show scrollbar when hovering
+        ":hover": {
+          overflowY: "scroll", // Enable scrollbar on hover
+          "&::-webkit-scrollbar": {
+            opacity: 1,
+          }
+        }
       }}
     >
       <div
         dangerouslySetInnerHTML={{ __html: diffResult }}
         style={{
+          
           background: token.colorBgContainer,
-          padding: "15px",
+          padding: "0",
           color: token.colorTextBase,
           fontSize: "16px",
           wordWrap: "break-word",
+          
         }}
       />
     </div>
@@ -266,35 +318,59 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
     }
   };
 
-  const renderActionButton = (icon, text, onClick, type = "default", disabled = false,danger=false) => {
-
-    const smallicon=!isMobile && !baseVersion && !targetVersion ;
+  const renderActionButton = (icon, text, onClick, type = "default", disabled = false, danger=false) => {
+    const smallicon = !isMobile && !baseVersion && !targetVersion;
     return (
-      <Tooltip title={!smallicon?text:""} placement="top">
-      <Button
-        icon={icon}
-        type={type}
-        onClick={onClick}
-        disabled={disabled}
-        style={{ minWidth: isMobile ? "40px" : "auto" }}
-        danger={danger}
-      >
-        {smallicon && text}
-      </Button>
-    </Tooltip>
+      <Tooltip title={!smallicon ? text : ""} placement="top">
+        <Button
+          icon={icon}
+          type={type}
+          onClick={onClick}
+          disabled={disabled}
+          style={{ minWidth: isMobile ? "40px" : "auto" }}
+          danger={danger}
+        >
+          {smallicon && text}
+        </Button>
+      </Tooltip>
     );
   };
 
   const timeline = (
     <div
-      style={{
-        width: timelineWidth,
-        transition: "0.3s ease",
-        overflowY: "auto",
-        height: isFullScreen ? "calc(100vh - 57px)" : "auto",
-        borderRight: isFullScreen ? `1px solid ${token.colorBorder}` : "none",
-        backgroundColor: token.colorBgElevated,
-      }}
+    style={{
+      width: timelineWidth,
+      transition: "0.3s ease",
+      height: isFullScreen ? "calc(100vh - 57px)" : "auto",
+      borderRight: isFullScreen ? `1px solid ${token.colorBorder}` : "none",
+      backgroundColor: token.colorBgElevated,
+      overflowY: "auto",
+      overflowX: "hidden",
+      
+      // Hide scrollbar by default
+      scrollbarWidth: "none", // Firefox
+      msOverflowStyle: "none", // IE and Edge
+      "&::-webkit-scrollbar": {
+        width: "6px", // Thin scrollbar
+        height: "6px" // Optional for horizontal scrollbar
+      },
+      "&::-webkit-scrollbar-thumb": {
+        backgroundColor: token.colorBorder, // Customize thumb color
+        borderRadius: "10px"
+      },
+      "&::-webkit-scrollbar-track": {
+        backgroundColor: "transparent" // Make track invisible
+      },
+    
+      // Show scrollbar when hovering
+      ":hover": {
+        overflowY: "scroll", // Enable scrollbar on hover
+        "&::-webkit-scrollbar": {
+          opacity: 1,
+        }
+      }
+    }}
+    
     >
       <Timeline
         style={{
@@ -459,21 +535,13 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
                       flex: "0 0 auto" 
                     }}>
                       {renderActionButton(
-                          <DeleteOutlined />, 
-                          "Delete", 
-                          () => deleteVersion(version),
-                           "default",
-                           false,
-                           true
-
-
-
-                          
-                         
-                        )}
-
-
-                      
+                        <DeleteOutlined />, 
+                        "Delete", 
+                        () => deleteVersion(version),
+                        "default",
+                        false,
+                        true
+                      )}
                     </div>
                   )}
                 </div>
@@ -496,6 +564,7 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
         display: "flex",
         flexDirection: "column",
         height: "calc(100vh - 57px)",
+        overflow: "hidden"
       }}
     >
       <div
@@ -525,9 +594,7 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
           backgroundColor: token.colorBgContainer,
           padding: "16px",
           display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          overflow: "auto",
+          overflow: "hidden"
         }}
       >
         <FileViewer content={baseContent} loading={baseLoading} />
@@ -547,6 +614,7 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
         flexDirection: "column",
         height: "calc(100vh - 57px)",
         borderLeft: `1px solid ${token.colorBorder}`,
+        overflow: "hidden"
       }}
     >
       <div
@@ -576,7 +644,7 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
           backgroundColor: token.colorBgContainer,
           padding: "16px",
           display: "flex",
-          overflow: "auto",
+          overflow: "hidden"
         }}
       >
         {comparing ? (
@@ -594,6 +662,7 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
 
   return (
     <Modal
+      
       title={
         <div style={{ display: "flex", alignItems: "center" }}>
           <Title level={4} style={{ margin: 0, fontSize: isMobile ? "16px" : "20px" }}>
@@ -629,6 +698,7 @@ const VersionHistoryModal = ({ visible, onClose, file, onrefersh }) => {
           width: "100%",
           height: "100%",
           padding: "0",
+          overflow: "hidden"
         }}
       >
         {timeline}

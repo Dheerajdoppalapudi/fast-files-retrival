@@ -273,12 +273,7 @@ export const ApprovalBucketSettingService = async (
             .andWhere("userId = :userId", { userId: userToRemove.id })
             .execute();
         
-        
-          // Step 3: If this approver was the default approver, clear the default approver in the bucket
-          if (bucket.defaultApproverId === approverToRemove.id) {
-            bucket.defaultApproverId = null;
-            await bucketRepository.save(bucket);
-          }
+
         
           return { message: 'Approver removed successfully' };
         
@@ -374,7 +369,7 @@ export const ApprovalItemSettingService = async (
         // Update approval settings
         item.requiresApproval = body.requiresApproval !== undefined ? body.requiresApproval : item.requiresApproval;
         item.versioningEnabled=body.versioningEnabled !== undefined ? body.versioningEnabled : item.versioningEnabled;
-        
+        item.ownerAutoApproves=body.ownerAutoApproves!==undefined?body.ownerAutoApproves:item.ownerAutoApproves;
         await itemRepository.save(item);
         return { message: 'Approval settings updated successfully' };
 
@@ -648,6 +643,7 @@ export const getItemSettingService = async (
         requiresApproval: item.requiresApproval,
         versioningEnabled: item.versioningEnabled,
         approvalStatus: item.approvalStatus,
+        ownerAutoApproves:item.ownerAutoApproves,
         defaultApprover: item.defaultApprover ? {
           id: item.defaultApprover.id,
           name: item.defaultApprover.name,

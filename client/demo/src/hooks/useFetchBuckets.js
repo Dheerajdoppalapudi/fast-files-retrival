@@ -145,8 +145,8 @@ const useFetchBuckets = () => {
     }
   }, []);
 
-  const handleFolderClick = (folderId, folderName) => {
-    setBreadcrumbPath((prev) => [...prev, { id: folderId, name: folderName }]);
+  const handleFolderClick = (folderId, folderName,permissionType=true) => {
+    setBreadcrumbPath((prev) => [...prev, { id: folderId, name: folderName,permissionType:permissionType }]);
   };
 
   const navigateToBreadcrumb = (index) => {

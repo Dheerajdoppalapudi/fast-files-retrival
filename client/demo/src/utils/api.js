@@ -491,6 +491,14 @@ class BucketsService {
 
     }
 
+    async removeBucket ({bucketId}){
+        return this.baseService.request(
+            `${this.endpoint}/${bucketId}/bucket`,{
+                method:'DELETE',
+            }
+        )
+    }
+
 
 }
 
@@ -508,10 +516,14 @@ class ItemService{
    
 
 
-    async uploadFileWithProgress({notes,file, currentBucketID=null, onProgress = () => {}}) {
+    async uploadFileWithProgress({ notes, file, currentBucketID = null, onProgress = () => {} }) {
         return new Promise((resolve, reject) => {
             if (!file || !file.name) {
-                return reject({ error: "Invalid file", message: "File is required" });
+                const errorResponse = this.baseService.formatResponse(false, null, "File is required", "Invalid file");
+                if (this.baseService.notificationCallback) {
+                    this.baseService.notificationCallback(errorResponse.message, errorResponse.error);
+                }
+                return reject(errorResponse);
             }
     
             const fileName = encodeURIComponent(file.name); // Ensuring safe URL usage
@@ -535,40 +547,69 @@ class ItemService{
     
             xhr.addEventListener("load", () => {
                 try {
+                    
                     const response = JSON.parse(xhr.response);
-                    if (xhr.status === 201) {
-                        resolve(response);
+                    if (xhr.status === 200) {
+                        const successResponse = this.baseService.formatResponse(true, response, 'Upload successful');
+                        // if (this.baseService.notificationCallback) {
+                        //     this.baseService.notificationCallback(successResponse.message, null);
+                        // }
+                        resolve(successResponse);
                     } else {
-                        reject({
-                            error: response.error || "Upload failed",
-                            message: response.message || "Upload failed",
-                            status: xhr.status,
-                        });
+                        const errorResponse = this.baseService.formatResponse(false, null, 
+                            response.error || "Upload failed", 
+                            response.error || "Upload failed");
+                        if (this.baseService.notificationCallback) {
+                            this.baseService.notificationCallback(errorResponse.message, errorResponse.error);
+                        }
+                        reject(errorResponse);
                     }
                 } catch (error) {
-                    reject({
-                        error: "Failed to parse response",
-                        message: "Upload failed",
-                        status: xhr.status,
-                    });
+                    const errorResponse = this.baseService.formatResponse(false, null, "Upload failed", "Failed to parse response");
+                    if (this.baseService.notificationCallback) {
+                        this.baseService.notificationCallback(errorResponse.message, errorResponse.error);
+                    }
+                    reject(errorResponse);
                 }
             });
     
             xhr.addEventListener("error", () => {
-                reject({
-                    error: "Network error",
-                    message: "Upload failed",
-                    status: 0,
-                });
+                let errorMessage = "Network error";  // Default message
+                
+                
+                // Check if there's a response from the server to parse the error
+                try {
+                    const response = JSON.parse(xhr.response);
+                    errorMessage = response.error || response.message || "Network error"; // Extract error message from response
+                } catch (e) {
+                    // If parsing fails, fall back to default error message
+                }
+            
+                const errorResponse = this.baseService.formatResponse(false, null, "Upload failed", errorMessage);
+                if (this.baseService.notificationCallback) {
+                    this.baseService.notificationCallback(errorResponse.message, errorResponse.error);
+                }
+                reject(errorResponse);
             });
-    
+            
             xhr.addEventListener("abort", () => {
-                reject({
-                    error: "Upload cancelled",
-                    message: "Upload was cancelled",
-                    status: 0,
-                });
+                let errorMessage = "Upload was cancelled";  // Default message
+              
+                // Check if there's a response from the server to parse the error
+                try {
+                    const response = JSON.parse(xhr.response);
+                    errorMessage = response.error || response.message || "Upload was cancelled"; // Extract error message from response
+                } catch (e) {
+                    // If parsing fails, fall back to default error message
+                }
+            
+                const errorResponse = this.baseService.formatResponse(false, null, "Upload cancelled", errorMessage);
+                if (this.baseService.notificationCallback) {
+                    this.baseService.notificationCallback(errorResponse.message, errorResponse.error);
+                }
+                reject(errorResponse);
             });
+            
     
             // Open and send the request
             xhr.open(
@@ -585,6 +626,7 @@ class ItemService{
             xhr.send(formData);
         });
     }
+    
 
     async shareItem ({itemID,email,permissionType}){
         if (!itemID ||!email){

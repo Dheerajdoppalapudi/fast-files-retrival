@@ -144,7 +144,7 @@ const HomePage = () => {
         </div>
         <div style={{ display: "flex", marginBottom: "20px" }}>
           <Button
-            disabled={currentCategory.key === "Approval"}
+            disabled={(getCurrentBucket()&&!getCurrentBucket().permissionType)||currentCategory.key === "Approval"}
             type="primary"
             icon={<UploadOutlined />}
             style={{
@@ -163,19 +163,20 @@ const HomePage = () => {
             {token.theme === "dark" ? "Upload" : "Upload File"}
           </Button>
           <Button
-            disabled={currentCategory.key === "Approval"}
+            disabled={(getCurrentBucket()&&!getCurrentBucket().permissionType)|| currentCategory.key === "Approval"}
             icon={<FolderAddOutlined />}
             style={{
-              color: currentCategory.key === "Approval" ? null : "#e6e6e6",
-              backgroundColor: currentCategory.key === "Approval" ? null : "#2a2a2a",
-              borderColor: currentCategory.key === "Approval" ? null : "#444",
+              color:  "#e6e6e6",
               height: "38px",
               marginLeft: "10px",
+              backgroundColor: "#2a2a2a",
               transition: "all 0.3s ease",
-              boxShadow:
-                currentCategory.key === "Approval"
-                  ? "none"
-                  : "0 2px 10px rgba(0, 0, 0, 0.1)",
+              boxShadow: "0 2px 10px rgba(0, 0, 0, 0.1)",
+               
+              ...(getCurrentBucket()&&!getCurrentBucket()?.permissionType||currentCategory.key === "Approval"
+              ?{color:null,backgroundColor:null,borderColor:null,boxShadow:null}:{}
+            
+            )
             }}
             onClick={() => setNewFolderModalVisible(true)}
           >

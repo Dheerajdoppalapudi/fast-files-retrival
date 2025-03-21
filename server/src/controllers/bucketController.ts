@@ -8,7 +8,8 @@ import {
   revokeBucketPermission,
   listFilesByExtensionService,
   getUserAccessList,
-  ApprovalItemList
+  ApprovalItemList,
+  deleteBucketService
 } from '../services/bucketService';
 
 
@@ -121,6 +122,18 @@ export const ApprovalItem = async (req: AuthRequest, res: Response) => {
   try {
     const userId = req.user?.id;
     const result = await ApprovalItemList(userId);
+    res.status(200).json(result);
+  } catch (error) {
+    res.status(500).json({ error: (error as Error).message });
+  }
+
+}
+
+export const deleteBucket = async (req: AuthRequest, res: Response) => {
+  try {
+    const { bucketId } = req.params;
+    const userId = req.user?.id;
+    const result = await deleteBucketService (userId,bucketId);
     res.status(200).json(result);
   } catch (error) {
     res.status(500).json({ error: (error as Error).message });

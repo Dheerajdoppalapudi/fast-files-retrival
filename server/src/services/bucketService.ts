@@ -10,6 +10,7 @@ import { In } from "typeorm";
 import { ObjectVersion } from "../models/ObjectVersion";
 import { Approver } from "../models/Approver";
 import { Approval } from "../models/Approval";
+import { deleteFile, getObjectPath } from "../utils/storage";
 
 const permissionService = new PermissionService();
 
@@ -583,7 +584,6 @@ export const listAllBucketService = async (userId: any): Promise<any> => {
       .andWhere("permission.bucketId IS NOT NULL") // Ensure it's a bucket permission
       .getMany();
 
-    console.log(permittedBuckets.length);
     // Extract unique buckets from permissions
     const accessBuckets = permittedBuckets
       .map((perm) => perm.bucket)
@@ -926,5 +926,59 @@ export const ApprovalItemList = async (
       folders:[],
       files:files
      };
+  });
+};
+
+
+
+export const deleteBucketService = async (userId: string, bucketId: string): Promise<{ message: string }> => {
+  return executeTransaction(async (queryRunner) => {
+    const bucketRepository = queryRunner.manager.getRepository(Bucket);
+    const itemRepository = queryRunner.manager.getRepository(MyItem);
+    const versionRepository = queryRunner.manager.getRepository(ObjectVersion);
+
+    const bucket = await bucketRepository.findOne({ where: { id: bucketId }, relations: ['children'] });
+    if (!bucket) throw new Error('Bucket not found');
+
+    // Check permissions
+    if (bucket.userId !== userId) {
+      const hasDeletePermission = await permissionService.hasBucketPermission(userId, bucketId, 'delete');
+      if (!hasDeletePermission) {
+        throw new Error('You do not have permission to delete this bucket');
+      }
+    }
+
+    // Recursive function to delete nested buckets
+    const deleteBucketRecursively = async (bucketId: string) => {
+      const childBuckets = await bucketRepository.find({ where: { parentId: bucketId } });
+      for (const child of childBuckets) {
+        await deleteBucketRecursively(child.id);
+      }
+
+      // Find all items in the bucket
+      const items = await itemRepository.find({ where: { bucketId } });
+      for (const item of items) {
+        // Find all versions of each item
+        const versions = await versionRepository.find({ where: { objectId: item.id } });
+
+        // Delete all version files
+        for (const version of versions) {
+          const objectPath = getObjectPath(bucket.name, item.key, version.id);
+          deleteFile(objectPath);
+        }
+
+        // Delete item and its versions from the database
+        await versionRepository.delete({ objectId: item.id });
+        await itemRepository.delete(item.id);
+      }
+
+      // Delete the bucket
+      await bucketRepository.delete(bucketId);
+    };
+
+    // Start deletion process from the root bucket
+    await deleteBucketRecursively(bucketId);
+
+    return { message: 'Bucket and all its nested buckets and items deleted successfully' };
   });
 };

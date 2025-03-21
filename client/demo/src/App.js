@@ -7,6 +7,7 @@ import { Login, Register } from './components/auth';
 import HomePage from './HomePage';
 import { useAuth } from './utils/auth';
 import Applayout from './Layout/AppLayout';
+import './App.css'
 
 const PublicRoute = ({ children }) => {
   const { user } = useAuth();

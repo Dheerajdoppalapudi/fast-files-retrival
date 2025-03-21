@@ -44,6 +44,12 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange ,onSucc
   const handledelete =async (record)=>{
     if(record.isFolder){
 
+      const response=await api.Buckets().removeBucket({
+        bucketId:record.id
+      })
+      if(response.success){
+        onSuccess()
+      }
     }
     else{
       const response=await api.Items().removeItem({
@@ -151,7 +157,7 @@ const FileTable = ({ data, onFolderClick, onVersionClick, onSelectChange ,onSucc
             }}
             onClick={() => {
               if (record.isFolder) {
-                onFolderClick(record.id, record.name);
+                onFolderClick(record.id, record.name,record.permissionType==='write');
               } else if (record.hasVersions || record.versions.length > 0) {
                 onVersionClick(record);
               }

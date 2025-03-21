@@ -36,3 +36,17 @@
     transform: rotate(360deg);
   }
 }
+
+
+ins {
+  background: green !important; /* Remove background */
+  text-decoration: underline !important; /* Remove underline or any text decoration */
+  color: inherit !important; /* Set color to inherit from the parent */
+  /* text-decoration-color: red !important;   */
+}
+del {
+  background:red !important; /* Remove background */
+  text-decoration: underline !important; 
+  text-decoration-color: red !important;  /* Remove underline or any text decoration */
+  color: inherit !important; 
+}

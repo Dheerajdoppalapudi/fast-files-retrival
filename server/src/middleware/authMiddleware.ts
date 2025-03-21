@@ -11,7 +11,7 @@ export interface AuthRequest extends Request {
 }
 
 // Middleware to authenticate JWT token
-const asyncHandler =
+export const asyncHandler =
   <T extends Request = Request>(fn: (req: T, res: Response, next: NextFunction) => Promise<void>) =>
   (req: T, res: Response, next: NextFunction) => {
     Promise.resolve(fn(req, res, next)).catch(next);

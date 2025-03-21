@@ -41,6 +41,9 @@ export class MyItem extends BaseEntity {
   @JoinColumn({ name: 'defaultApproverId' })
   defaultApprover?: Approver;
 
+  @Column({ type: 'boolean', default: true }) 
+  ownerAutoApproves!: boolean;
+
   @Column({ type: 'varchar', default: 'pending' }) 
   approvalStatus!: string;
 

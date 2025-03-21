@@ -12,62 +12,67 @@ const permissionService = new PermissionService();
 
 
 
-
 export const downloadVersionsService = async (
   versionId: string,
   userId: string
-): Promise<{objectPath: string,objectName:string}> => {
+): Promise<{ objectPath: string; objectName: string }> => {
   return executeTransaction(async (queryRunner) => {
-    const bucketRepository = queryRunner.manager.getRepository(Bucket);
-    const myItemRepository = queryRunner.manager.getRepository(MyItem);
     const versionRepository = queryRunner.manager.getRepository(ObjectVersion);
+    const myItemRepository = queryRunner.manager.getRepository(MyItem);
+    const bucketRepository = queryRunner.manager.getRepository(Bucket);
 
+    // Fetch version details
     const version = await versionRepository.findOne({
-      where: { id:versionId },
+      where: { id: versionId },
+      select: ['id', 'objectId'], // Fetch only required fields
     });
 
     if (!version) {
-      throw new Error('Unable to find this version');
+      throw new Error('Version not found.');
     }
 
+    // Fetch item details
     const myItem = await myItemRepository.findOne({
       where: { id: version.objectId },
+      select: ['id', 'userId', 'key', 'bucketId'],
     });
 
     if (!myItem) {
-      throw new Error('Unable to find this version');
+      throw new Error('Item associated with the version not found.');
     }
 
+    // Check permissions if the user is not the owner
     if (myItem.userId !== userId) {
-      const hasWritePermission =
+      const hasAccess =
         (await permissionService.hasItemPermission(userId, myItem.id)) ||
         (await permissionService.hasItemPermission(userId, myItem.id, 'view'));
 
-      if (!hasWritePermission) {
-        throw new Error('You do not have permission to download this file');
+      if (!hasAccess) {
+        throw new Error('You do not have permission to download this file.');
       }
     }
 
+    // Fetch bucket details
     const bucket = await bucketRepository.findOne({
       where: { id: myItem.bucketId },
+      select: ['name'],
     });
 
     if (!bucket) {
-      throw new Error('Unable to find this version');
+      throw new Error('Bucket associated with the item not found.');
     }
 
+    // Get object storage path
     const objectPath = getObjectPath(bucket.name, myItem.key, version.id);
 
+    // Ensure the file exists
     if (!fs.existsSync(objectPath)) {
-      throw new Error('File not found');
+      throw new Error('File not found on the server.');
     }
 
     return {
-      objectPath:objectPath,
-      objectName:myItem.key
-
-    }; // Return file path
+      objectPath,
+      objectName: myItem.key,
+    };
   });
 };
-
-

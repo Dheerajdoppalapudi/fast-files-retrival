@@ -103,12 +103,13 @@ export const uploadObjectService = async (
     
     if (!myItem) {
       // Create new item
+      isFirstUpload=true;
       myItem = new MyItem();
       myItem.bucketId = bucket.id;
       myItem.key = key;
       myItem.userId = userId;
       myItem.versioningEnabled = true; // Enable versioning by default
-
+      myItem.ownerAutoApproves=bucket.ownerAutoApproves
       // Inherit approval settings from bucket if applicable
       if (bucket.requiresApproval) {
         myItem.requiresApproval = true;
@@ -122,7 +123,6 @@ export const uploadObjectService = async (
 
       myItem = await myItemRepository.save(myItem);
       isFirstUpload = true;
-      
       // Create permissions for the item owner
       await permissionService.assignItemPermission(userId, myItem.id);
       
@@ -195,12 +195,11 @@ export const uploadObjectService = async (
           where: { id: approverId },
           relations: ['users']
         });
-       
         
         if (approver) {
           
           // Check if owner auto-approval is enabled and if user is the owner
-          if (shouldOwnerAutoApprove(bucket, myItem) && myItem.userId === userId) {
+          if (isFirstUpload ||  (shouldOwnerAutoApprove(bucket, myItem) && myItem.userId === userId)) {
             // Auto-approve this version
             newVersion.status = 'approved';
             newVersion.isLatest = true;
@@ -230,7 +229,7 @@ export const uploadObjectService = async (
             newVersion.status = 'pending';
 
          
-            
+  
             // Don't make it the latest version until approved
             newVersion.isLatest = false;
             
@@ -284,7 +283,6 @@ export const uploadObjectService = async (
       // No approval required - auto-approve
       newVersion.status = 'approved';
       newVersion.isLatest = true;
-      console.log("vgjhgjhsgdhjgjgjskdgjkskjk")
       
       // If there's a previous latest version, mark it as not latest
       if (latestVersion) {
@@ -297,9 +295,26 @@ export const uploadObjectService = async (
       await versionRepository.save(newVersion);
     }
 
+    if(!myItem.versioningEnabled){
+        const versions = await versionRepository.find({ where: { objectId: myItem.id } });
+        // Delete all version files
+        for (const version of versions) {
+          if(version.id!==newVersion.id){
+            const objectPath = getObjectPath(bucket.name, myItem.key, version.id);
+            deleteFile(objectPath);
+            await versionRepository.delete(version.id);
+          }
+        }
+        newVersion.isLatest=true;
+        await versionRepository.save(newVersion)
+        // Delete the item and all its versions from database
+    }
+
     // Save the file to the final location
     const objectPath = getObjectPath(bucket.name, key, newVersion.id);
     fs.renameSync(file.path, objectPath);
+
+
 
     return { 
       key, 
@@ -314,7 +329,8 @@ export const uploadObjectService = async (
 // Helper function to determine if owner should auto-approve
 function shouldOwnerAutoApprove(bucket: Bucket, item: MyItem): boolean {
   // Check both bucket and item settings
-  return (bucket.ownerAutoApproves === true);
+    
+  return item.ownerAutoApproves===true|| bucket.ownerAutoApproves === true;
 }
 
 

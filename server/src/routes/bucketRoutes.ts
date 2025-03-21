@@ -1,5 +1,5 @@
 import express from 'express';
-import { createBucket,assignPermission ,listAllBucket,listBucketContents,revokePermission,listBucketContentswithExtension,listUserAccessOfBucket, ApprovalItem} from '../controllers/bucketController';
+import { createBucket,assignPermission ,listAllBucket,listBucketContents,revokePermission,listBucketContentswithExtension,listUserAccessOfBucket, ApprovalItem, deleteBucket} from '../controllers/bucketController';
 import { AuthRequest, authenticateToken, authorizeRole } from '../middleware/authMiddleware';
 
 const router = express.Router();
@@ -12,6 +12,7 @@ router.get('/:bucketId/listUserAcessOfBucket', authenticateToken, listUserAccess
 router.put('/:bucketId/assignBucketPermission/:userEmail/:permissionType', authenticateToken, assignPermission);
 router.delete('/:bucketId/revokeBucketPermission/:userEmail', authenticateToken, revokePermission);
 router.get('/Approvals',authenticateToken,ApprovalItem)
+router.delete('/:bucketId/bucket',authenticateToken, deleteBucket);
 
 
 export default router;
