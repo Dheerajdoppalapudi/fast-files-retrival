@@ -10,6 +10,21 @@ import { Permission } from '../models/Permission';
 import { Approval } from '../models/Approval';
 import { Approver } from '../models/Approver';
 
+
+// const AppDataSource = new DataSource({
+//   type: 'mysql',
+//   host: process.env.MYSQL_HOST || 'localhost',
+//   port: parseInt(process.env.MYSQL_PORT || '3306'),
+//   username: process.env.MYSQL_USERNAME || 'root',
+//   password: process.env.MYSQL_PASSWORD || 'password',
+//   database: process.env.MYSQL_DATABASE || 'mydatabase',
+//   entities: [Bucket, MyItem, ObjectVersion, User, Permission, Approval, Approver],
+//   synchronize: true, // Be careful with this in production
+//   logging: false,
+// });
+
+
+
 // Initialize the DataSource
 const AppDataSource = new DataSource({
   type: 'sqlite',

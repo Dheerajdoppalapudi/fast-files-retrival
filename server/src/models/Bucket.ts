@@ -4,6 +4,7 @@ import { Permission } from './Permission';
 import { Approval } from './Approval';
 import {Approver} from "./Approver"
 import { BaseEntity } from './BaseEntity';
+import { User } from './userModel';
 
 
 @Entity({ name: 'buckets' })
@@ -16,6 +17,10 @@ export class Bucket extends BaseEntity {
 
   @Column({ type: 'uuid' }) 
   userId!: string;
+
+  @ManyToOne(() => User)
+  @JoinColumn({ name: 'userId' })
+  owner!: User;
 
   @Column({ type: 'boolean', default: true }) 
   requiresApproval!: boolean;

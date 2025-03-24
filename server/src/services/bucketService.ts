@@ -86,7 +86,7 @@ export const listBucketContentsService = async (
       // Root level - get all accessible folders
       const accessibleFolders = await repositories.bucket.find({
         where: { id: In(Array.from(directAccessBucketIds)) },
-        relations: ["parent"],
+        relations: ["parent","owner"],
       });
 
       folders = accessibleFolders.filter(folder => 
@@ -96,7 +96,7 @@ export const listBucketContentsService = async (
       // Specific folder - get current folder and subfolders
       const currentBucket = await repositories.bucket.findOne({
         where: { id: bucketId },
-        relations: ["parent"],
+        relations: ["parent","owner"],
       });
 
       if (!currentBucket) {
@@ -220,6 +220,7 @@ export const listBucketContentsService = async (
               owner: {
                 username: file.owner.username,
                 email: file.owner.email,
+                isOwner:isOwner
               },
               permissionType: file.permissions.find(
                 perm => perm.itemId === file.id && perm.userId === userId
@@ -274,6 +275,11 @@ export const listBucketContentsService = async (
         type: "folder",
         parentId: folder.parentId,
         modified: folder.updated_at,
+        owner: {
+          username: folder.owner.username,
+          email: folder.owner.email,
+          isOwner:isOwner
+        },
         permissionType,
         ...(bucketApprovers.length > 0 ? {
           isApprover: true,
@@ -507,6 +513,7 @@ export const listFilesByExtensionService = async (
             owner: {
               username: file.owner.username,
               email: file.owner.email,
+              isOwner:isOwner
             },
             permissionType: file.permissions.find(
               (perm) => perm.itemId === file.id && perm.userId === userId
