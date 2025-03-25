@@ -1,362 +1,399 @@
+import { Entity, In, IsNull, Raw } from "typeorm";
+import { executeTransaction } from "./database";
+import { Bucket, MyItem, Permission, Approver, Approval, ObjectVersion, User } from "./models";
+
 export const listBucketContentsService = async (
-    userId: string,
-    bucketId?: string
-  ): Promise<any> => {
-    return executeTransaction(async (queryRunner) => {
-      const repositories = {
-        bucket: queryRunner.manager.getRepository(Bucket),
-        item: queryRunner.manager.getRepository(MyItem),
-        permission: queryRunner.manager.getRepository(Permission),
-        approver: queryRunner.manager.getRepository(Approver),
-        approval: queryRunner.manager.getRepository(Approval),
-        version: queryRunner.manager.getRepository(ObjectVersion)
-      };
-  
-      // Get all permissions and build inheritance chain
-      const allPermissions = await repositories.permission.find({
-        where: { userId },
-        relations: ["bucket"]
-      });
-  
-      const permissionMap = new Map<string, {
-        type: string;
-        inherited: boolean;
-        sourceBucketId: string | null;
-      }>();
-  
-      allPermissions.forEach(perm => {
-        if (perm.bucket) {
-          permissionMap.set(perm.bucket.id, {
-            type: perm.permissionType,
-            inherited: perm.inherited,
-            sourceBucketId: perm.inherited ? perm.bucket.parentId || null : null
-          });
-        }
-      });
-  
-      // Function to find original permission source
-      const findPermissionSource = (bucketId: string): {type: string, sourceId: string} | null => {
-        const visited = new Set<string>();
-        let currentBucketId = bucketId;
-        
-        while (currentBucketId) {
-          if (visited.has(currentBucketId)) break;
-          visited.add(currentBucketId);
-          
-          const perm = permissionMap.get(currentBucketId);
-          if (!perm) break;
-          
-          if (!perm.inherited) {
-            return {
-              type: perm.type,
-              sourceId: currentBucketId
-            };
-          }
-          
-          currentBucketId = perm.sourceBucketId || "";
-        }
-        return null;
-      };
-  
-      // Get all accessible buckets (direct + inherited)
-      const accessibleBuckets = await repositories.bucket.find({
-        where: { id: In(Array.from(permissionMap.keys())) },
-        relations: ["parent"]
-      });
-  
-      // Build inheritance tree
-      const bucketTree = new Map<string, string[]>();
-      accessibleBuckets.forEach(bucket => {
-        if (bucket.parentId) {
-          if (!bucketTree.has(bucket.parentId)) {
-            bucketTree.set(bucket.parentId, []);
-          }
-          bucketTree.get(bucket.parentId)?.push(bucket.id);
-        }
-      });
-  
-      // Get all buckets in inheritance hierarchy
-      const getAllChildBuckets = (parentId: string): string[] => {
-        const children = bucketTree.get(parentId) || [];
-        return children.concat(
-          ...children.map(childId => getAllChildBuckets(childId))
-        );
-      };
-  
-      const allAccessibleBucketIds = new Set<string>();
-      permissionMap.forEach((perm, bucketId) => {
-        allAccessibleBucketIds.add(bucketId);
-        if (perm.inherited) {
-          getAllChildBuckets(bucketId).forEach(childId => 
-            allAccessibleBucketIds.add(childId)
-          );
-        }
-      });
-  
-      // Handle approvers (unchanged from original)
-      const userApproverGroups = await repositories.approver
-        .createQueryBuilder("approver")
-        .innerJoin("approver.users", "user", "user.id = :userId", { userId })
-        .getMany();
-  
-      const approverMap = new Map<string, string[]>();
-      userApproverGroups.forEach(approver => {
-        const [prefix, id] = approver.name.startsWith('bucket_') ? 
-          ['bucket_', approver.name.substring(7)] :
-          approver.name.startsWith('file_') ? 
-          ['file_', approver.name.substring(5)] : 
-          [null, null];
-        
-        if (id) {
-          if (!approverMap.has(id)) approverMap.set(id, []);
-          approverMap.get(id)?.push(approver.name);
-        }
-      });
-  
-      // Handle current location and folders
-      let folders = [];
-      let currentLocation = { name: "Root" };
-  
-      if (bucketId === undefined) {
-        // Root level - show top-level accessible folders
-        folders = accessibleBuckets.filter(b => 
-          !b.parentId || !allAccessibleBucketIds.has(b.parentId)
-        );
-      } else {
-        // Specific bucket requested
-        const currentBucket = await repositories.bucket.findOne({
-          where: { id: bucketId },
-          relations: ["parent", "owner"]
+  userId: string,
+  bucketId?: string
+): Promise<any> => {
+  return executeTransaction(async (queryRunner) => {
+    // Initialize repositories
+    const bucketRepo = queryRunner.manager.getRepository(Bucket);
+    const itemRepo = queryRunner.manager.getRepository(MyItem);
+    const permissionRepo = queryRunner.manager.getRepository(Permission);
+    const approverRepo = queryRunner.manager.getRepository(Approver);
+    const approvalRepo = queryRunner.manager.getRepository(Approval);
+    const versionRepo = queryRunner.manager.getRepository(ObjectVersion);
+
+    // Step 1: Load all permissions and build inheritance tree
+    const allPermissions = await permissionRepo.find({
+      where: { userId },
+      relations: ["bucket"]
+    });
+
+    // Build permission maps
+    const directPermissionMap = new Map<string, string>();
+    const inheritedPermissionMap = new Map<string, {type: string, from: string}>();
+    const allAccessibleBuckets = new Set<string>();
+
+    allPermissions.forEach(perm => {
+      if (!perm.bucket) return;
+      
+      allAccessibleBuckets.add(perm.bucket.id);
+      if (perm.inherited) {
+        inheritedPermissionMap.set(perm.bucket.id, {
+          type: perm.permissionType,
+          from: perm.bucket.parentId || ''
         });
-  
-        if (!currentBucket) {
-          return { currentLocation: { name: "Root" }, folders: [], files: [] };
-        }
-  
-        currentLocation = {
-          id: currentBucket.id,
-          name: currentBucket.name,
-          parentId: currentBucket.parentId
-        };
-  
-        if (allAccessibleBucketIds.has(bucketId)) {
-          folders = await repositories.bucket.find({
-            where: { parentId: bucketId },
-            relations: ["owner"]
-          });
-        }
+      } else {
+        directPermissionMap.set(perm.bucket.id, perm.permissionType);
       }
-  
-      // Process folders with inherited permissions
-      const folderList = folders.map(folder => {
-        const isOwner = folder.userId === userId;
-        let permissionInfo = permissionMap.get(folder.id);
-        let permissionType = permissionInfo?.type || (isOwner ? "owner" : null);
-        
-        if (!permissionType && allAccessibleBucketIds.has(folder.id)) {
-          const source = findPermissionSource(folder.id);
-          permissionType = source?.type || "inherited";
-        }
-  
-        const bucketApprovers = approverMap.get(folder.id) || [];
-        
-        return {
-          id: folder.id,
-          name: folder.name,
-          type: "folder",
-          parentId: folder.parentId,
-          modified: folder.updated_at,
-          owner: {
-            username: folder.owner.username,
-            email: folder.owner.email,
-            isOwner
-          },
-          permissionType,
-          ...(bucketApprovers.length > 0 && {
-            isApprover: true,
-            approverNames: bucketApprovers
-          }),
-          ...(isOwner && { isOwner })
-        };
+    });
+
+    // Step 2: Find all inheriting child buckets
+    const findInheritingChildren = async (parentId: string): Promise<string[]> => {
+      const children = await bucketRepo.find({ 
+        where: { parentId },
+        select: ["id"]
       });
-  
-      // Handle files (similar permission inheritance logic)
-      let files: any[] = [];
-      if (bucketId && allAccessibleBucketIds.has(bucketId)) {
-        const [allFiles, allVersions] = await Promise.all([
-          repositories.item.find({
-            where: { bucketId },
-            relations: ['owner', 'permissions']
-          }),
-          repositories.version.find({
-            where: { object: { bucketId } },
-            relations: ['uploader']
-          })
-        ]);
-  
-        // Process files with inherited permissions
-        files = allFiles.map(file => {
-          const isOwner = file.userId === userId;
-          let permissionType = file.permissions.find(
-            p => p.userId === userId
-          )?.permissionType;
-  
-          if (!permissionType) {
-            if (isOwner) {
-              permissionType = "owner";
-            } else if (allAccessibleBucketIds.has(bucketId)) {
-              const source = findPermissionSource(bucketId);
-              permissionType = source?.type || "inherited";
-            }
-          }
-  
-          // Rest of file processing (versions, approvals etc.)
-          // ... (keep existing file version processing logic)
-          
-          return {
-            // ... existing file properties
-            permissionType,
-            // ... other properties
-          };
-        }).filter(Boolean);
+      
+      const childIds = children.map(c => c.id);
+      const grandChildren = await Promise.all(
+        childIds.map(id => findInheritingChildren(id))
+      );
+      
+      return [...childIds, ...grandChildren.flat()];
+    };
+
+    // Add all inheriting children to accessible buckets
+    await Promise.all(
+      Array.from(inheritedPermissionMap.keys()).map(async bucketId => {
+        const children = await findInheritingChildren(bucketId);
+        children.forEach(id => allAccessibleBuckets.add(id));
+      })
+    );
+
+    // Step 3: Resolve permission types including inheritance
+    const resolvePermissionType = (bucketId: string): string | null => {
+      // Check for direct permission first
+      if (directPermissionMap.has(bucketId)) {
+        return directPermissionMap.get(bucketId) || null;
       }
-  
+
+      // Walk up inheritance chain
+      const visited = new Set<string>();
+      let currentId = bucketId;
+      
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        
+        const inheritedPerm = inheritedPermissionMap.get(currentId);
+        if (inheritedPerm) {
+          return inheritedPerm.type;
+        }
+        
+        // Move up hierarchy
+        const parent = bucketTree.get(currentId);
+        currentId = parent || '';
+      }
+      
+      return null;
+    };
+
+    // Step 4: Build bucket tree structure
+    const allBuckets = await bucketRepo.find({
+      where: { id: In(Array.from(allAccessibleBuckets)) },
+      relations: ["parent"]
+    });
+
+    const bucketTree = new Map<string, string>();
+    allBuckets.forEach(b => {
+      if (b.parentId) bucketTree.set(b.id, b.parentId);
+    });
+
+    // Step 5: Handle approvers
+    const userApprovers = await approverRepo
+      .createQueryBuilder("approver")
+      .innerJoin("approver.users", "user", "user.id = :userId", { userId })
+      .getMany();
+
+    const approverMap = new Map<string, string[]>();
+    userApprovers.forEach(approver => {
+      const [type, id] = approver.name.includes('_') ? 
+        approver.name.split('_') : [null, null];
+      
+      if (id && (type === 'bucket' || type === 'file')) {
+        if (!approverMap.has(id)) approverMap.set(id, []);
+        approverMap.get(id)?.push(approver.name);
+      }
+    });
+
+    // Step 6: Build folder structure
+    let currentLocation = { name: "Root" };
+    let folders = [];
+
+    if (bucketId === undefined) {
+      // Root level - show top-level accessible folders
+      folders = allBuckets.filter(b => 
+        !b.parentId || !allAccessibleBuckets.has(b.parentId)
+      );
+    } else {
+      // Specific folder requested
+      const currentBucket = await bucketRepo.findOne({
+        where: { id: bucketId },
+        relations: ["parent", "owner"]
+      });
+
+      if (!currentBucket || !allAccessibleBuckets.has(bucketId)) {
+        return { currentLocation: { name: "Root" }, folders: [], files: [] };
+      }
+
+      currentLocation = {
+        id: currentBucket.id,
+        name: currentBucket.name,
+        parentId: currentBucket.parentId
+      };
+
+      folders = await bucketRepo.find({
+        where: { parentId: bucketId },
+        relations: ["owner"]
+      });
+    }
+
+    // Step 7: Process folders with permissions
+    const processedFolders = folders.map(folder => {
+      const isOwner = folder.userId === userId;
+      const permissionType = resolvePermissionType(folder.id) || 
+                           (isOwner ? "owner" : null);
+      
       return {
-        currentLocation,
-        folders: folderList,
-        files
+        id: folder.id,
+        name: folder.name,
+        type: "folder",
+        parentId: folder.parentId,
+        owner: {
+          username: folder.owner.username,
+          isOwner
+        },
+        permissionType,
+        ...(approverMap.get(folder.id) && {
+          isApprover: true,
+          approverNames: approverMap.get(folder.id)
+        })
       };
     });
-  };
 
-
-
-  export const listFilesByExtensionService = async (
-    userId: string,
-    fileExtension?: string
-  ): Promise<any> => {
-    return executeTransaction(async (queryRunner) => {
-      const repositories = {
-        bucket: queryRunner.manager.getRepository(Bucket),
-        item: queryRunner.manager.getRepository(MyItem),
-        permission: queryRunner.manager.getRepository(Permission),
-        approver: queryRunner.manager.getRepository(Approver),
-        approval: queryRunner.manager.getRepository(Approval),
-        version: queryRunner.manager.getRepository(ObjectVersion)
-      };
-  
-      // Get all permissions and build inheritance map
-      const allPermissions = await repositories.permission.find({
-        where: { userId },
-        relations: ["bucket"]
-      });
-  
-      const permissionHierarchy = new Map<string, {
-        type: string;
-        inherited: boolean;
-        sourceId: string | null;
-      }>();
-  
-      allPermissions.forEach(perm => {
-        if (perm.bucket) {
-          permissionHierarchy.set(perm.bucket.id, {
-            type: perm.permissionType,
-            inherited: perm.inherited,
-            sourceId: perm.inherited ? perm.bucket.parentId || null : null
-          });
-        }
-      });
-  
-      // Function to resolve original permission
-      const resolvePermission = (bucketId: string): string | null => {
-        const visited = new Set<string>();
-        let currentId = bucketId;
-        
-        while (currentId) {
-          if (visited.has(currentId)) break;
-          visited.add(currentId);
-          
-          const perm = permissionHierarchy.get(currentId);
-          if (!perm) break;
-          
-          if (!perm.inherited) return perm.type;
-          currentId = perm.sourceId || "";
-        }
-        return null;
-      };
-  
-      // Get all accessible bucket IDs
-      const accessibleBucketIds = Array.from(permissionHierarchy.keys());
-  
-      // Get all child buckets that inherit permissions
-      const childBuckets = await repositories.bucket.find({
-        where: { parentId: In(accessibleBucketIds) }
-      });
-  
-      const allAccessibleBucketIds = new Set(accessibleBucketIds);
-      childBuckets.forEach(b => allAccessibleBucketIds.add(b.id));
-  
-      // File extension filter
-      const extensionCondition = fileExtension ? {
-        key: Raw(alias => `LOWER(${alias}) LIKE :ext`, {
-          ext: `%.${fileExtension.toLowerCase().replace(/^\./, '')}`
+    // Step 8: Process files with inherited permissions
+    let files = [];
+    if (bucketId && allAccessibleBuckets.has(bucketId)) {
+      const [bucketFiles, fileVersions] = await Promise.all([
+        itemRepo.find({
+          where: { bucketId },
+          relations: ['owner', 'permissions']
+        }),
+        versionRepo.find({
+          where: { object: { bucketId } },
+          order: { created_at: "DESC" },
+          relations: ['uploader']
         })
-      } : {};
-  
-      // Get all accessible files
-      const files = await repositories.item.find({
-        where: {
-          bucketId: In(Array.from(allAccessibleBucketIds)),
-          ...extensionCondition
-        },
-        relations: ['owner', 'permissions', 'bucket']
-      });
-  
-      // Process files with permission inheritance
-      const processedFiles = await Promise.all(files.map(async file => {
+      ]);
+
+      // Group versions by file
+      const versionsByFile = fileVersions.reduce((acc, version) => {
+        if (!acc[version.objectId]) acc[version.objectId] = [];
+        acc[version.objectId].push(version);
+        return acc;
+      }, {} as Record<string, typeof fileVersions>);
+
+      files = bucketFiles.map(file => {
         const isOwner = file.userId === userId;
         let permissionType = file.permissions.find(
           p => p.userId === userId
         )?.permissionType;
-  
+
         if (!permissionType) {
-          if (isOwner) {
-            permissionType = "owner";
-          } else {
-            permissionType = resolvePermission(file.bucketId) || null;
-          }
+          permissionType = isOwner ? "owner" : resolvePermissionType(bucketId);
         }
-  
-        // Get file versions (simplified example)
-        const versions = await repositories.version.find({
-          where: { objectId: file.id },
-          order: { created_at: "DESC" },
-          take: 5
-        });
-  
-        return {
-          id: file.id,
-          name: file.key,
-          bucketId: file.bucketId,
-          bucketName: file.bucket.name,
-          permissionType,
-          versions: versions.map(v => ({
+
+        const versions = (versionsByFile[file.id] || [])
+          .filter(v => v.status === "approved" || v.userId === userId)
+          .map(v => ({
             id: v.id,
             versionId: v.versionId,
             status: v.status,
-            uploadedAt: v.created_at
-          })),
+            uploader: v.uploader?.username || "System"
+          }));
+
+        return {
+          id: file.id,
+          name: file.key,
+          type: "file",
+          bucketId,
+          permissionType,
+          versions,
+          latestVersion: versions[0],
           owner: {
             username: file.owner.username,
             isOwner
-          }
+          },
+          ...(approverMap.get(file.id) && {
+            isApprover: true,
+            approverNames: approverMap.get(file.id)
+          })
         };
-      }));
-  
+      });
+    }
+
+    return {
+      currentLocation,
+      folders: processedFolders,
+      files
+    };
+  });
+};
+
+
+
+
+import { In, Raw } from "typeorm";
+import { executeTransaction } from "./database";
+import { Bucket, MyItem, Permission, Approver, ObjectVersion } from "./models";
+
+export const listFilesByExtensionService = async (
+  userId: string,
+  fileExtension?: string
+): Promise<any> => {
+  return executeTransaction(async (queryRunner) => {
+    // Initialize repositories
+    const bucketRepo = queryRunner.manager.getRepository(Bucket);
+    const itemRepo = queryRunner.manager.getRepository(MyItem);
+    const permissionRepo = queryRunner.manager.getRepository(Permission);
+    const approverRepo = queryRunner.manager.getRepository(Approver);
+    const versionRepo = queryRunner.manager.getRepository(ObjectVersion);
+
+    // Step 1: Load all permissions
+    const allPermissions = await permissionRepo.find({
+      where: { userId },
+      relations: ["bucket"]
+    });
+
+    // Step 2: Build permission hierarchy
+    const permissionHierarchy = new Map<string, {
+      type: string;
+      inherited: boolean;
+      sourceId: string | null;
+    }>();
+
+    allPermissions.forEach(perm => {
+      if (perm.bucket) {
+        permissionHierarchy.set(perm.bucket.id, {
+          type: perm.permissionType,
+          inherited: perm.inherited,
+          sourceId: perm.inherited ? perm.bucket.parentId : null
+        });
+      }
+    });
+
+    // Step 3: Find all accessible buckets
+    const accessibleBucketIds = Array.from(permissionHierarchy.keys());
+    const allBuckets = await bucketRepo.find({
+      where: { id: In(accessibleBucketIds) },
+      select: ["id", "parentId"]
+    });
+
+    // Build bucket parent-child relationships
+    const bucketTree = new Map<string, string[]>();
+    allBuckets.forEach(bucket => {
+      if (bucket.parentId) {
+        if (!bucketTree.has(bucket.parentId)) bucketTree.set(bucket.parentId, []);
+        bucketTree.get(bucket.parentId)?.push(bucket.id);
+      }
+    });
+
+    // Recursively find all inheriting children
+    const findAllChildren = (parentId: string): string[] => {
+      const children = bucketTree.get(parentId) || [];
+      return children.concat(...children.map(findAllChildren));
+    };
+
+    const allAccessibleBucketIds = new Set(accessibleBucketIds);
+    permissionHierarchy.forEach((perm, bucketId) => {
+      if (perm.inherited) {
+        findAllChildren(bucketId).forEach(childId => 
+          allAccessibleBucketIds.add(childId)
+        );
+      }
+    });
+
+    // Step 4: Apply file extension filter if provided
+    const extensionCondition = fileExtension ? {
+      key: Raw(alias => `LOWER(${alias}) LIKE :ext`, {
+        ext: `%.${fileExtension.toLowerCase().replace(/^\./, '')}`
+      })
+    } : {};
+
+    // Step 5: Find all accessible files
+    const files = await itemRepo.find({
+      where: {
+        bucketId: In(Array.from(allAccessibleBucketIds)),
+        ...extensionCondition
+      },
+      relations: ['owner', 'bucket']
+    });
+
+    // Step 6: Resolve permission types
+    const resolvePermission = (bucketId: string): string | null => {
+      let currentId = bucketId;
+      const visited = new Set<string>();
+      
+      while (currentId && !visited.has(currentId)) {
+        visited.add(currentId);
+        const perm = permissionHierarchy.get(currentId);
+        
+        if (perm && !perm.inherited) return perm.type;
+        currentId = perm?.sourceId || '';
+      }
+      return null;
+    };
+
+    // Step 7: Load versions in batch
+    const fileIds = files.map(f => f.id);
+    const allVersions = fileIds.length > 0 ? await versionRepo.find({
+      where: { objectId: In(fileIds) },
+      order: { created_at: "DESC" }
+    }) : [];
+
+    // Group versions by file
+    const versionsByFile = allVersions.reduce((acc, version) => {
+      if (!acc[version.objectId]) acc[version.objectId] = [];
+      acc[version.objectId].push(version);
+      return acc;
+    }, {} as Record<string, typeof allVersions>);
+
+    // Step 8: Process files with permissions
+    const processedFiles = files.map(file => {
+      const isOwner = file.userId === userId;
+      const permissionType = resolvePermission(file.bucketId) || 
+                          (isOwner ? "owner" : null);
+      
+      const versions = (versionsByFile[file.id] || [])
+        .filter(v => v.status === "approved" || v.userId === userId)
+        .map(v => ({
+          id: v.id,
+          versionId: v.versionId,
+          status: v.status,
+          created_at: v.created_at
+        }));
+
       return {
-        extension: fileExtension || "all",
-        totalFiles: processedFiles.length,
-        files: processedFiles
+        id: file.id,
+        name: file.key,
+        bucketId: file.bucketId,
+        bucketName: file.bucket.name,
+        permissionType,
+        versions,
+        latestVersion: versions[0],
+        owner: {
+          username: file.owner.username,
+          isOwner
+        }
       };
     });
-  };
+
+    return {
+      extension: fileExtension || "all",
+      totalFiles: processedFiles.length,
+      files: processedFiles
+    };
+  });
+};
