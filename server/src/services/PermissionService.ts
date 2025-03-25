@@ -61,7 +61,7 @@ export class PermissionService {
       throw new Error('User already has this permission');
     }
 
-    const permission = this.permissionRepository.create({ userId, bucketId, permissionType });
+    const permission = this.permissionRepository.create({ userId, bucketId, permissionType,inherited:true });
     return await this.permissionRepository.save(permission);
   }
 

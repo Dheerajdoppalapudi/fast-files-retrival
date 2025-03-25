@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Modal, Button, Select, message, Table, Tag, Divider, Typography, Tooltip, Space } from 'antd';
+import { Modal, Button, Select, message, Table, Tag, Divider, Typography, Tooltip, Space, Switch } from 'antd';
 import { UserOutlined, DeleteOutlined, EyeOutlined, EditOutlined } from '@ant-design/icons';
 import api from '../utils/api';
 
@@ -189,6 +189,30 @@ const ShareModal = ({ visible, item, onClose }) => {
     }
   };
 
+  // Function to update inheritance setting
+const handleUpdateInheritance = async (record) => {
+  try {
+    setLoading(true);
+    if (item.isFolder) {
+      // await api.Buckets().updateShareInheritance({
+      //   email: record.email,
+      //   bucketId: item.id,
+      //   inherit: record.inherited
+      // });
+    }
+    
+    message.success(`Inheritance setting updated for ${record.username || record.email}`);
+    // fetchAccessList();
+  } catch (error) {
+    console.error('Error updating inheritance:', error);
+    message.error('Failed to update inheritance setting');
+  } finally {
+    setLoading(false);
+  }
+};
+
+
+
   const columns = [
     {
       title: 'User',
@@ -238,6 +262,31 @@ const ShareModal = ({ visible, item, onClose }) => {
         );
       },
     },
+    {
+      title: 'Inherited',
+      key: 'inherited',
+      render: (_, record) => {
+        // Check if this is a folder (only folders can have inheritance)
+        const isFolder = item?.isFolder;
+        
+        return isFolder ? (
+          <Switch
+            checked={record.inherited || false}
+            onChange={(checked) => {
+              // Handle the inheritance toggle
+              const updatedRecord = { ...record, inherited: checked };
+              handleUpdateInheritance(updatedRecord);
+            }}
+            checkedChildren="Yes"
+            unCheckedChildren="No"
+            disabled={loading}
+          />
+        ) : (
+          <Tag color="gray">N/A</Tag>
+        );
+      },
+    },
+    
     {
       title: 'Actions',
       key: 'actions',

@@ -19,6 +19,9 @@ export class Permission extends BaseEntity {
   @Column({ type: 'varchar', length: 50 }) 
   permissionType!: string;
 
+  @Column({ type: 'boolean', default: false }) 
+  inherited!: boolean;
+
   @ManyToOne(() => Bucket, (bucket) => bucket.permissions, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'bucketId' })
   bucket?: Bucket;
