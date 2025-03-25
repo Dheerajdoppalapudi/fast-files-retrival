@@ -155,6 +155,7 @@ export const listBucketContentsService = async (
           relations: ["owner"]
         });
       }
+   
   
       // 6. Process folders with permissions (existing + inheritance)
       const processedFolders = await Promise.all(folders.map(async folder => {
@@ -295,3 +296,51 @@ export const listBucketContentsService = async (
       };
     });
   };
+
+
+  const findInheritedPermission = (folderId: string): string | null => {
+    let currentId = folderId;
+    while (currentId) {
+      if (bucketPermissionMap.has(currentId)) {
+        return bucketPermissionMap.get(currentId) || null;
+      }
+      const parentBucket = folders.find(folder => folder.id === currentId);
+      if (!parentBucket) break;
+      currentId = parentBucket.parentId || null;
+    }
+    return null;
+  };
+  
+  // Format folders with correct permission inheritance tracking
+  const folderList = folders.map(folder => {
+    const isOwner = folder.userId === userId;
+    let permissionType = bucketPermissionMap.get(folder.id) || 
+                         (isOwner ? "owner" : null);
+  
+    // If no direct permission, check inherited source
+    if (!permissionType && allAccessibleBucketIds.has(folder.id)) {
+      permissionType = findInheritedPermission(folder.id);
+    }
+  
+    const bucketApprovers = approverMap.get(folder.id) || [];
+  
+    return {
+      id: folder.id,
+      name: folder.name,
+      type: "folder",
+      parentId: folder.parentId,
+      modified: folder.updated_at,
+      owner: {
+        username: folder.owner.username,
+        email: folder.owner.email,
+        isOwner
+      },
+      permissionType,
+      ...(bucketApprovers.length > 0 ? {
+        isApprover: true,
+        approverNames: bucketApprovers
+      } : {}),
+      ...(isOwner ? { isOwner } : {})
+    };
+  });
+  
